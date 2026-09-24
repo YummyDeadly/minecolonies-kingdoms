@@ -49,20 +49,22 @@ public final class MineColoniesIntegration
     /** A MineColonies colony was deleted: its Kingdoms record goes the same way (routes break, cargo is handled, history). */
     private static void removed(final IColony colony)
     {
-        try
-        {
-            final MinecraftServer server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
-            if (server == null || !server.isSameThread()) return;
-            final com.minecolonies.kingdoms.persistence.KingdomsSavedData data =
-                com.minecolonies.kingdoms.persistence.KingdomsSavedData.get(server.overworld());
-            com.minecolonies.kingdoms.colony.ColonyRemoval.remove(data,
-                MineColoniesColonySynchronizer.colonyId(colony.getDimension().location(), colony.getID()), server.overworld().getGameTime(),
-                "its MineColonies colony was deleted");
-        }
-        catch (RuntimeException exception)
-        {
-            KingdomsMod.LOGGER.error("Could not remove the Kingdoms record of deleted colony {}", colony.getID(), exception);
-        }
+        final MinecraftServer server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+        if (server == null) return;
+        final java.util.UUID id = MineColoniesColonySynchronizer.colonyId(colony.getDimension().location(), colony.getID());
+        // always on the server thread: inline when already there, otherwise queued for the next tick
+        server.execute(() -> {
+            try
+            {
+                final com.minecolonies.kingdoms.persistence.KingdomsSavedData data =
+                    com.minecolonies.kingdoms.persistence.KingdomsSavedData.get(server.overworld());
+                com.minecolonies.kingdoms.colony.ColonyRemoval.remove(data, id, server.overworld().getGameTime(), "its MineColonies colony was deleted");
+            }
+            catch (RuntimeException exception)
+            {
+                KingdomsMod.LOGGER.error("Could not remove the Kingdoms record of deleted colony {}", id, exception);
+            }
+        });
     }
 
     private static void synchronize(final IColony colony)

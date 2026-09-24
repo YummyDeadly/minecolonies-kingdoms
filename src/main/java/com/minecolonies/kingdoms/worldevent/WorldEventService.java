@@ -55,6 +55,7 @@ public final class WorldEventService
     static final long SALT_ROLL = 101L;
     static final long SALT_CHOICE = 102L;
     static final long SALT_MAGNITUDE = 103L;
+    static final long SALT_SUBJECT = 104L;
     /** Threat added to a road target during a bandit surge: 20..35. */
     public static final double SURGE_MIN = 20.0D;
     public static final double SURGE_RANGE = 15.0D;
@@ -142,8 +143,9 @@ public final class WorldEventService
     }
 
     /**
-     * One planning evaluation, exactly once per evaluation index: a seeded roll against the event chance, then a seeded,
-     * weighted choice among the eligible candidates (in a fixed order).
+     * One planning evaluation, exactly once per evaluation index: a seeded roll against the event chance, then a seeded
+     * choice of the type (weighted by the type's strongest candidate, so that many neighbour pairs do not crowd out the
+     * settlement and road events), then a seeded, weighted choice of the subject within that type (in a fixed order).
      */
     static Optional<WorldEventRecord> plan(final KingdomsSavedData data, final List<Candidate> eligible, final long gameTime,
         final WorldEventSettings settings)
@@ -155,20 +157,36 @@ public final class WorldEventService
         if (!settings.enabled() || eligible.isEmpty()) return Optional.empty();
         final long seed = evaluationSeed(registry.seed(), evaluation);
         if (EncounterRules.unit(seed, SALT_ROLL) >= settings.eventChance()) return Optional.empty();
-        final double total = eligible.stream().mapToDouble(Candidate::weight).sum();
-        if (total <= 0.0D) return Optional.empty();
-        double pick = EncounterRules.unit(seed, SALT_CHOICE) * total;
-        Candidate chosen = eligible.getLast();
-        for (final Candidate candidate : eligible)
-        {
-            pick -= candidate.weight();
-            if (pick < 0.0D)
-            {
-                chosen = candidate;
-                break;
-            }
-        }
+        final Candidate chosen = choose(eligible, seed).orElse(null);
+        if (chosen == null) return Optional.empty();
         return Optional.of(create(data, generatedId(registry.seed(), evaluation), WorldEventRecord.Cause.GENERATED, chosen, gameTime, settings));
+    }
+
+    /** Type first (weight: its strongest candidate), then the subject within the type (weight: the candidate's own). */
+    public static Optional<Candidate> choose(final List<Candidate> eligible, final long seed)
+    {
+        final java.util.EnumMap<WorldEventType, List<Candidate>> byType = new java.util.EnumMap<>(WorldEventType.class);
+        for (final Candidate candidate : eligible)
+            if (candidate.weight() > 0.0D) byType.computeIfAbsent(candidate.type(), type -> new ArrayList<>()).add(candidate);
+        if (byType.isEmpty()) return Optional.empty();
+        final List<WorldEventType> types = new ArrayList<>(byType.keySet());
+        final List<Double> typeWeights = types.stream()
+            .map(type -> byType.get(type).stream().mapToDouble(Candidate::weight).max().orElse(0.0D)).toList();
+        final WorldEventType type = types.get(pick(typeWeights, EncounterRules.unit(seed, SALT_CHOICE)));
+        final List<Candidate> subjects = byType.get(type);
+        return Optional.of(subjects.get(pick(subjects.stream().map(Candidate::weight).toList(), EncounterRules.unit(seed, SALT_SUBJECT))));
+    }
+
+    private static int pick(final List<Double> weights, final double unit)
+    {
+        final double total = weights.stream().mapToDouble(Double::doubleValue).sum();
+        double remaining = unit * total;
+        for (int index = 0; index < weights.size(); index++)
+        {
+            remaining -= weights.get(index);
+            if (remaining < 0.0D) return index;
+        }
+        return weights.size() - 1;
     }
 
     private static WorldEventRecord create(final KingdomsSavedData data, final UUID id, final WorldEventRecord.Cause cause, final Candidate chosen,
@@ -500,9 +518,10 @@ public final class WorldEventService
         String result = why == null ? "" : why;
         if (event.type().reversible() && event.applied() && !event.reverted())
         {
+            // flag first: if giving back failed half-way, it is never tried again (a lost effect, never a doubled one)
+            event.markReverted();
             final String restored = revert(data, event);
             result = result.isEmpty() ? restored : result + "; " + restored;
-            event.markReverted();
         }
         if (result.isEmpty()) result = event.status() == WorldEventRecord.Status.PLANNED ? "called off" : "over";
         event.end(terminal, gameTime, result);

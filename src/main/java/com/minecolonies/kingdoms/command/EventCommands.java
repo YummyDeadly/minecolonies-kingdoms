@@ -230,8 +230,14 @@ public final class EventCommands
             source.sendFailure(Component.literal("Unknown event type " + typeText));
             return 0;
         }
-        final UUID subject = subject(data, subjectText);
-        final UUID other = otherText == null ? null : subject(data, otherText);
+        UUID subject = subject(data, subjectText);
+        UUID other = otherText == null ? null : subject(data, otherText);
+        if (type.scope() == WorldEventType.Scope.PAIR)
+        {
+            // a settlement stands for its faction in diplomatic events
+            subject = factionOf(data, subject);
+            other = factionOf(data, other);
+        }
         if (subject == null || (otherText != null && other == null))
         {
             source.sendFailure(Component.literal("Unknown subject (use a settlement, road, or faction UUID or a unique prefix of 6+ characters)"));
@@ -259,6 +265,12 @@ public final class EventCommands
         source.sendSuccess(() -> Component.literal(changed ? "Event " + event.id() + " is now " + event.status() + ": " + event.outcome()
             : "Event " + event.id() + " is already " + event.status() + "; nothing changed"), true);
         return changed ? 1 : 0;
+    }
+
+    private static UUID factionOf(final KingdomsSavedData data, final UUID id)
+    {
+        if (id == null) return null;
+        return data.colony(id).map(NPCColonyData::factionId).orElse(id);
     }
 
     /** A settlement, road, or faction UUID, or a unique prefix (6+ characters) of one. */

@@ -2,14 +2,14 @@
 
 MineColonies: Kingdoms is a server-authoritative NeoForge addon that adds a persistent strategic layer above MineColonies. MineColonies remains authoritative for colonies, citizens, buildings, jobs, construction, requests, warehouses, couriers, guards, and claims.
 
-The current Phase 1–10 foundation provides:
+The current Phase 1–11 foundation provides:
 
 - persistent factions, kingdoms, strategic colony records, economy, needs, and decisions;
 - public-API MineColonies lifecycle synchronization and warehouse observation;
 - a bounded round-robin world simulation with active/abstract modes and hysteresis;
 - separate player and AI controllers (AI currently records intent and never orders construction);
 - configurable tick intervals, batch size, time budget, and activation radii;
-- sequential save-schema migration from version 1 through version 15;
+- sequential save-schema migration from version 1 through version 16;
 - commands and cumulative timings for diagnostics.
 - strategic NPC colonies that do not require a physical Town Hall;
 - deterministic offer/demand matching, persistent routes, and restart-safe abstract shipments;
@@ -32,6 +32,10 @@ The current Phase 1–10 foundation provides:
 - Phase 8.1 bandit camps: roads that stay dangerous get a small camp beside them (deterministic, capped, with cooldowns); an active camp raises its road's threat; clearing it suppresses the road and pays a clear-the-camp contract exactly once; the physical camp is placed only on wild, owned land and taken down again after the camp ends.
 - Phase 9 settlement security: every NPC settlement keeps a persisted garrison (capacity from type, population and civic buildings; daily recruitment); a transparent security value from the garrison, civic buildings, recent defences and road danger now drives the road threat model; garrisons send seeded, exactly-once patrols against nearby unobserved bandit camps; near players a few physical guards patrol the local streets and respond to physical bandit fights, with caps and hysteresis. Guard deaths are technical losses unless they die to the bandits they were sent to (applied once when that fight ends); killing a guard costs reputation.
 - Phase 10 wars: explicit, audited wars between NPC factions (operator or a conservative autonomous declaration after a lasting hostile relation; never from a relation value alone, never involving players' factions); armies detached from garrisons march along the road graph by time, besiege an enemy settlement, fight one seeded battle that folds in whatever was fought physically (exactly once), and bring their survivors home; sieges post defence contracts; a sacked town pays tribute and is weaker for a while; wars end by score or time with a one-time indemnity, a neutral relation, and a truce. Physical soldiers appear near players with caps and hysteresis. No conquest or block destruction.
+- Phase 11 world events and history:
+  - eight seeded, capped, restart-safe events: harvest failure, trade fair, bandit surge, garrison fever, militia muster, border incident, envoy visit, and migration;
+  - each acts once and only through the system that owns what it changes: the economy, the road threat target, garrisons, audited relations, or the growth population rule;
+  - a bounded, deduplicated world history of events, camps, wars, battles, and abandoned colonies.
 
 No Mixins, reflection, or MineColonies source changes are used.
 
@@ -74,6 +78,7 @@ The jar is produced in `build/libs/`. Server configuration is generated as `conf
 - `/kingdoms camp list|info|spawn-test|build|remove|disband` (operator)
 - `/kingdoms security list|info|stats|evaluate|set-garrison|guards` (operator)
 - `/kingdoms war list|info|declare|mobilize|ceasefire|peace|evaluate|battles|battle|resolve|stats` and `/kingdoms army list|info|raise|materialize|dematerialize` (operator)
+- `/kingdoms event stats|list|info|candidates|history|evaluate|trigger|resolve|cancel` and `/kingdoms history` (operator)
 - `/kingdoms simulation` and `/kingdoms simulation stats` (operator)
 - `/kingdoms debug` (operator)
 
@@ -93,6 +98,7 @@ The jar is produced in `build/libs/`. Server configuration is generated as `conf
 - [Settlement security, garrisons, and guards](docs/SECURITY.md)
 - [Wars](docs/WAR.md)
 - [Armies, sieges, and battles](docs/MILITARY.md)
+- [World events and history](docs/WORLD_EVENTS.md)
 - [MineColonies integration](docs/MINECOLONIES_INTEGRATION.md)
 - [Dedicated-server smoke test](docs/SMOKE_TEST.md)
 - [Roadmap](docs/ROADMAP.md)

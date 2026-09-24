@@ -139,6 +139,30 @@ class WorldEventTest
         assertTrue(WorldEventService.evaluateNow(farming(), 1_000L, never).planned().isEmpty(), "chance 0: nothing ever happens");
     }
 
+    @Test
+    void manyNeighbourPairsDoNotCrowdOutSettlementAndRoadEvents()
+    {
+        final java.util.ArrayList<WorldEventService.Candidate> pool = new java.util.ArrayList<>();
+        for (int index = 0; index < 20; index++)
+        {
+            pool.add(new WorldEventService.Candidate(WorldEventType.BORDER_INCIDENT, null, null, id("fa" + index), id("fb" + index), null, null,
+                null, 2.0D, "pair " + index));
+            pool.add(new WorldEventService.Candidate(WorldEventType.ENVOY_VISIT, null, null, id("fa" + index), id("fb" + index), null, null,
+                null, 2.0D, "pair " + index));
+        }
+        pool.add(new WorldEventService.Candidate(WorldEventType.HARVEST_FAILURE, A, null, null, null, null, EconomicResource.FOOD, null, 3.0D, "farm"));
+        int harvests = 0;
+        for (long seed = 0; seed < 2_000L; seed++)
+        {
+            final WorldEventService.Candidate chosen = WorldEventService.choose(pool, seed * 0x9E3779B97F4A7C15L).orElseThrow();
+            assertEquals(chosen, WorldEventService.choose(pool, seed * 0x9E3779B97F4A7C15L).orElseThrow(), "seeded");
+            if (chosen.type() == WorldEventType.HARVEST_FAILURE) harvests++;
+        }
+        // types are weighted by their strongest candidate (3 : 2 : 2), not by how many subjects they have
+        assertTrue(harvests > 700 && harvests < 1_000, "harvest failures: " + harvests + " of 2000");
+        assertTrue(WorldEventService.choose(List.of(), 1L).isEmpty());
+    }
+
     // ------------------------------------------------------------------------------------------------ effects through authorities
 
     @Test
