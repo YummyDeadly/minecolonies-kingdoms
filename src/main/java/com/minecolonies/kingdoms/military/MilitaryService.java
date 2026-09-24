@@ -351,6 +351,20 @@ public final class MilitaryService
         return lost;
     }
 
+    /**
+     * A guard fell to an enemy soldier outside a siege (a skirmish with a marching army, Phase 10): the garrison loses
+     * that soldier now, once per guard ({@code guardId} is the event ID); returns the soldiers lost.
+     */
+    public static int skirmishLoss(final KingdomsSavedData data, final UUID settlementId, final UUID guardId, final long gameTime)
+    {
+        final GarrisonRecord garrison = data.military().garrison(settlementId).orElse(null);
+        if (garrison == null) return 0;
+        final int lost = garrison.lose(UUID.nameUUIDFromBytes(("kingdoms-skirmish:" + guardId).getBytes(StandardCharsets.UTF_8)), 1);
+        if (lost > 0) garrison.alert(gameTime + ALERT_TICKS);
+        data.markChanged();
+        return lost;
+    }
+
     /** A settlement was sacked: its security is reduced until {@code until} (a transparent term of the breakdown). */
     public static void sacked(final KingdomsSavedData data, final UUID settlementId, final long until)
     {
@@ -372,6 +386,28 @@ public final class MilitaryService
     static UUID armyEventId(final UUID armyId)
     {
         return UUID.nameUUIDFromBytes(("kingdoms-army-return:" + armyId).getBytes(StandardCharsets.UTF_8));
+    }
+
+    // ------------------------------------------------------------------------------------------------ world events (Phase 11)
+
+    /** Volunteers from a world event join once (the event ID), never above the capacity; returns who joined. */
+    public static int eventRecruits(final KingdomsSavedData data, final UUID settlementId, final UUID eventId, final int soldiers)
+    {
+        final GarrisonRecord garrison = data.military().garrison(settlementId).orElse(null);
+        if (garrison == null) return 0;
+        final int joined = garrison.join(eventId, soldiers);
+        data.markChanged();
+        return joined;
+    }
+
+    /** Soldiers desert because of a world event, once (the event ID); returns who left. */
+    public static int eventLosses(final KingdomsSavedData data, final UUID settlementId, final UUID eventId, final int soldiers)
+    {
+        final GarrisonRecord garrison = data.military().garrison(settlementId).orElse(null);
+        if (garrison == null) return 0;
+        final int lost = garrison.lose(eventId, soldiers);
+        data.markChanged();
+        return lost;
     }
 
     /** After an evaluation failed as a whole: the next attempt waits for the normal interval instead of every cycle. */

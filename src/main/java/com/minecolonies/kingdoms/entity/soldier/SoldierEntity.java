@@ -112,7 +112,15 @@ public final class SoldierEntity extends PathfinderMob implements KnightAppearan
         goalSelector.addGoal(4, new FollowPlanGoal(this));
         goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 8.0F));
         goalSelector.addGoal(7, new RandomLookAroundGoal(this));
-        targetSelector.addGoal(1, new HurtByTargetGoal(this, SoldierEntity.class).setAlertOthers(SoldierEntity.class));
+        targetSelector.addGoal(1, new HurtByTargetGoal(this, SoldierEntity.class)
+        {
+            @Override
+            protected void alertOthers()
+            {
+                // only this soldier's own squad joins in (vanilla would alert every soldier of every army nearby)
+                ArmyManager.getInstance().alertSquad(SoldierEntity.this, mob.getLastHurtByMob());
+            }
+        }.setAlertOthers());
         targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, SettlementGuardEntity.class, 5, true, false,
             target -> target instanceof SettlementGuardEntity guard && ArmyManager.getInstance().enemies(this, guard)));
     }
@@ -159,6 +167,14 @@ public final class SoldierEntity extends PathfinderMob implements KnightAppearan
         if (wasDead || !dead) return; // a cancelled death (LivingDeathEvent) or a repeated call reports nothing
         if (!managerDiscard && !level().isClientSide) ArmyManager.getInstance().onSoldierDeath(this, source);
     }
+
+    /** Never through portals (that would load chunks in another dimension); the manager owns where soldiers are. */
+    @Override
+    public boolean canUsePortal(final boolean allowPassengers) { return false; }
+
+    /** Never riding: a passenger would be saved to chunks with its vehicle. */
+    @Override
+    public boolean startRiding(final Entity vehicle, final boolean force) { return false; }
 
     @Override
     protected void dropCustomDeathLoot(final ServerLevel level, final DamageSource source, final boolean recentlyHit) { }

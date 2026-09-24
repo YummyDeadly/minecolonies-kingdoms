@@ -347,6 +347,11 @@ class WarTest
         assertTrue(army.arrivedAt(half + 200L + rest));
         CampaignService.hold(data, army, Double.NaN, half + 300L);
         assertEquals(at, army.progressAt(half + 200L), 1.0E-9, "garbage is ignored");
+        // a squad that is fighting holds its army where it stands
+        CampaignService.hold(data, army, army.heldProgress(), half + 400L);
+        final double held = army.progressAt(half + 400L);
+        CampaignService.hold(data, army, army.heldProgress(), half + 1_400L);
+        assertEquals(held, army.progressAt(half + 1_400L), 1.0E-9);
     }
 
     @Test
@@ -395,5 +400,33 @@ class WarTest
         assertEquals(1, evaluation.ended().size());
         assertEquals(WarRecord.Result.WHITE_PEACE, war.result());
         assertTrue(WarService.openWarOf(data, FA).isEmpty(), "the surviving side is free again");
+    }
+
+    @Test
+    void aWarThatCannotFieldAnArmyRetriesLaterNotEveryUpdate()
+    {
+        final KingdomsSavedData data = armed(3, 4);
+        final WarRecord war = activeWar(data, 0L);
+        CampaignService.update(data, 100L, WAR, CONTRACTS);
+        assertTrue(data.war().armies().isEmpty(), "three soldiers cannot field an army of four");
+        assertEquals(100L + CampaignService.RAISE_RETRY_TICKS, war.nextRaiseAt());
+        MilitaryService.setStrength(data, A, 12);
+        CampaignService.update(data, 200L, WAR, CONTRACTS);
+        assertTrue(data.war().armies().isEmpty(), "waits for the retry time");
+        final KingdomsSavedData restarted = PersistenceTestAccess.reload(data);
+        CampaignService.update(restarted, 100L + CampaignService.RAISE_RETRY_TICKS, WAR, CONTRACTS);
+        assertEquals(1, restarted.war().armies().size());
+    }
+
+    @Test
+    void aGuardKilledByAMarchingArmyCostsItsGarrisonOnce()
+    {
+        final KingdomsSavedData data = armed(12, 6);
+        final UUID guard = UUID.randomUUID();
+        assertEquals(1, MilitaryService.skirmishLoss(data, B, guard, 100L));
+        assertEquals(0, MilitaryService.skirmishLoss(data, B, guard, 110L), "one guard, one soldier, once");
+        assertEquals(5, garrison(data, B).strength());
+        assertEquals(1, MilitaryService.skirmishLoss(data, B, UUID.randomUUID(), 120L));
+        assertEquals(4, PersistenceTestAccess.reload(data).military().garrison(B).orElseThrow().strength());
     }
 }

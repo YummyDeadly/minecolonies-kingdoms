@@ -41,6 +41,8 @@ public final class CampaignService
     public static final int SOLDIER_KILL_REPUTATION = 3;
     public static final int DEFEND_CONTRACT_REPUTATION = 8;
     public static final int BATTLE_RELATION = -10;
+    /** A war that could not raise an army tries again after this long (not every campaign update). */
+    public static final long RAISE_RETRY_TICKS = 2_400L;
 
     private CampaignService() {}
 
@@ -84,9 +86,12 @@ public final class CampaignService
                 if (war.status() != WarRecord.Status.ACTIVE) continue;
                 if (data.war().armies().stream().anyMatch(army -> army.open() && army.warId().equals(war.id()))) continue;
                 if (war.lastArmyAt() != Long.MIN_VALUE && gameTime - war.lastArmyAt() < settings.armyCooldownTicks()) continue;
+                if (gameTime < war.nextRaiseAt()) continue;
                 try
                 {
-                    raiseArmy(data, war, gameTime, settings).ifPresent(raised::add);
+                    final Optional<ArmyRecord> army = raiseArmy(data, war, gameTime, settings);
+                    if (army.isPresent()) raised.add(army.get());
+                    else war.raiseFailed(gameTime + RAISE_RETRY_TICKS);
                 }
                 catch (RuntimeException exception)
                 {

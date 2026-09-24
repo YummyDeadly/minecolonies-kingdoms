@@ -599,12 +599,6 @@ public final class SettlementGrowthManager
     public boolean tryGrowPopulation(final NPCColonyData colony, final SettlementGrowthStage stage,
         final SettlementRecord settlement, final int configuredHardCap)
     {
-        final int stageCapacity = settlement.type().maximumPopulation() + stage.ordinal() * 8;
-        final int cap = Math.min(configuredHardCap, stageCapacity);
-        if (colony.population() >= cap || !evaluator.populationAllowed(colony)) return false;
-        final int nextPopulation = colony.population() + 1;
-        final int desiredWorkers = Math.min(nextPopulation - colony.soldiers(), Math.max(colony.workers(), nextPopulation * 2 / 3));
-        colony.updatePopulation(nextPopulation, desiredWorkers, colony.soldiers());
-        return true;
+        return SettlementGrowthEvaluator.growPopulation(evaluator, colony, stage, settlement, configuredHardCap);
     }
 }

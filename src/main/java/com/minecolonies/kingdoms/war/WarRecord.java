@@ -61,6 +61,7 @@ public final class WarRecord
     private boolean peaceApplied;
     private long lastArmyAt = Long.MIN_VALUE;
     private int armiesRaised;
+    private long nextRaiseAt = Long.MIN_VALUE;
 
     WarRecord(final UUID id, final int ordinal, final UUID attacker, final UUID defender, final Cause cause, final long evidence,
         final long declaredAt, final long activeAt)
@@ -102,6 +103,8 @@ public final class WarRecord
     /** The other side, or null for a faction that is not part of this war. */
     public UUID enemyOf(final UUID faction) { return attacker.equals(faction) ? defender : defender.equals(faction) ? attacker : null; }
     public int armiesRaised() { return armiesRaised; }
+    /** After a failed attempt to raise an army (no garrison can field one, no road), the next attempt waits until then. */
+    public long nextRaiseAt() { return nextRaiseAt; }
 
     // ------------------------------------------------------------------------------------------------ transitions
 
@@ -127,6 +130,8 @@ public final class WarRecord
     int nextArmyOrdinal() { return ++armiesRaised; }
 
     void armyRaised(final long gameTime) { lastArmyAt = gameTime; }
+
+    void raiseFailed(final long retryAt) { nextRaiseAt = retryAt; }
 
     void ceasefire(final long gameTime)
     {
@@ -183,6 +188,7 @@ public final class WarRecord
         tag.putBoolean("peaceApplied", peaceApplied);
         tag.putLong("lastArmyAt", lastArmyAt);
         tag.putInt("armiesRaised", armiesRaised);
+        tag.putLong("nextRaiseAt", nextRaiseAt);
         return tag;
     }
 
@@ -206,6 +212,7 @@ public final class WarRecord
         war.peaceApplied = tag.getBoolean("peaceApplied");
         war.lastArmyAt = tag.contains("lastArmyAt") ? tag.getLong("lastArmyAt") : Long.MIN_VALUE;
         war.armiesRaised = Math.max(0, tag.getInt("armiesRaised"));
+        war.nextRaiseAt = tag.contains("nextRaiseAt") ? tag.getLong("nextRaiseAt") : Long.MIN_VALUE;
         if (war.status.terminal() && war.result == null) throw new IllegalArgumentException("Ended war " + war.id + " without result");
         return war;
     }

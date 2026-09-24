@@ -96,6 +96,28 @@ public final class SettlementGrowthEvaluator
             && colony.needs().stream().noneMatch(value -> value.severity() == NeedSeverity.CRITICAL);
     }
 
+    /**
+     * The one population rule (used by growth and by Phase 11 settler events): room below the stage capacity and the
+     * global hard cap, housing, food, and no critical need.
+     */
+    public static boolean populationRoom(final SettlementGrowthEvaluator evaluator, final NPCColonyData colony, final SettlementGrowthStage stage,
+        final SettlementRecord settlement, final int hardCap)
+    {
+        final int stageCapacity = settlement.type().maximumPopulation() + stage.ordinal() * 8;
+        return colony.population() < Math.min(hardCap, stageCapacity) && evaluator.populationAllowed(colony);
+    }
+
+    /** One new inhabitant if {@link #populationRoom} allows it; returns whether one arrived. */
+    public static boolean growPopulation(final SettlementGrowthEvaluator evaluator, final NPCColonyData colony, final SettlementGrowthStage stage,
+        final SettlementRecord settlement, final int hardCap)
+    {
+        if (!populationRoom(evaluator, colony, stage, settlement, hardCap)) return false;
+        final int nextPopulation = colony.population() + 1;
+        final int desiredWorkers = Math.min(nextPopulation - colony.soldiers(), Math.max(colony.workers(), nextPopulation * 2 / 3));
+        colony.updatePopulation(nextPopulation, desiredWorkers, colony.soldiers());
+        return true;
+    }
+
     private static SettlementBuildingType forNeed(final NeedType type)
     {
         return switch (type)

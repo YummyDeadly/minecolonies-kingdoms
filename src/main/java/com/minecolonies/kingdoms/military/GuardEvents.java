@@ -11,8 +11,8 @@ import net.minecraft.world.entity.LivingEntity;
  */
 public interface GuardEvents
 {
-    /** Whether any guard can have a further enemy right now (cheap; guards skip the target search otherwise). */
-    boolean active();
+    /** Whether this guard can have a further enemy right now (cheap; the guard skips the target search otherwise). */
+    boolean active(SettlementGuardEntity guard);
 
     /** Whether a guard should attack this entity. */
     boolean hostile(SettlementGuardEntity guard, LivingEntity target);
@@ -22,7 +22,7 @@ public interface GuardEvents
 
     GuardEvents NONE = new GuardEvents()
     {
-        @Override public boolean active() { return false; }
+        @Override public boolean active(final SettlementGuardEntity guard) { return false; }
         @Override public boolean hostile(final SettlementGuardEntity guard, final LivingEntity target) { return false; }
         @Override public boolean guardKilled(final SettlementGuardEntity guard, final Entity killer) { return false; }
     };

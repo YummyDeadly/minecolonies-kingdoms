@@ -131,7 +131,7 @@ public final class SettlementGuardEntity extends PathfinderMob implements Knight
             @Override
             public boolean canUse()
             {
-                return GarrisonManager.getInstance().hostilityActive() && super.canUse();
+                return GarrisonManager.getInstance().hostilityActive(SettlementGuardEntity.this) && super.canUse();
             }
         });
         targetSelector.addGoal(4, new NearestAttackableTargetGoal<>(this, Mob.class, 10, true, false,
@@ -148,6 +148,10 @@ public final class SettlementGuardEntity extends PathfinderMob implements Knight
     /** Guards never travel through portals (that would load chunks in another dimension); the manager owns where they are. */
     @Override
     public boolean canUsePortal(final boolean allowPassengers) { return false; }
+
+    /** Never riding: a passenger would be saved to chunks with its vehicle. */
+    @Override
+    public boolean startRiding(final Entity vehicle, final boolean force) { return false; }
 
     /** Guards never target their own side: other guards, settlement residents, or caravan members. */
     @Override

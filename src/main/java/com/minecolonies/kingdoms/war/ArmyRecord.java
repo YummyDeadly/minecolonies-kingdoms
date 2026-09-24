@@ -98,6 +98,8 @@ public final class ArmyRecord
     public int returned() { return returned; }
     public long legStartedAt() { return legStartedAt; }
     public long legTravelTicks() { return legTravelTicks; }
+    /** Progress at the start of the current leg (the last point its squad held it at, while observed). */
+    public double heldProgress() { return legStartProgress; }
     /** Travel time of the whole route (fixed when the army was raised). */
     public long fullTravelTicks() { return fullTravelTicks; }
 

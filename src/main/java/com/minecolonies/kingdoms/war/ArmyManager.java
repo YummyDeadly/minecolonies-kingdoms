@@ -15,6 +15,7 @@ import com.minecolonies.kingdoms.entity.guard.SettlementGuardEntity;
 import com.minecolonies.kingdoms.entity.soldier.SoldierEntity;
 import com.minecolonies.kingdoms.faction.Faction;
 import com.minecolonies.kingdoms.military.GuardEvents;
+import com.minecolonies.kingdoms.military.MilitaryService;
 import com.minecolonies.kingdoms.persistence.KingdomsSavedData;
 import com.minecolonies.kingdoms.world.road.RoadRoute;
 import com.minecolonies.kingdoms.world.road.RoadShipmentPath;
@@ -72,6 +73,7 @@ public final class ArmyManager implements GuardEvents
         private final Set<UUID> soldiers = new HashSet<>();
         private double lastProgress = Double.NaN;
         private long lastProgressAt;
+        private UUID leader;
 
         private Squad(final UUID armyId, final ResourceLocation dimension, final UUID observer, final long gameTime)
         {
@@ -159,8 +161,14 @@ public final class ArmyManager implements GuardEvents
         refreshWarCache(data);
         for (final Squad squad : List.copyOf(squads.values()))
             squad.soldiers.removeIf(id -> {
-                if (entity(squad.dimension, id) instanceof SoldierEntity soldier && !soldier.isRemoved()) return false;
+                final Entity entity = entity(squad.dimension, id);
+                if (entity instanceof SoldierEntity soldier && !soldier.isRemoved())
+                {
+                    if (soldier.level() instanceof ServerLevel level && level.isPositionEntityTicking(soldier.blockPosition())) return false;
+                    soldier.discardByManager(); // frozen outside the ticking area: it would only block its slot
+                }
                 soldierArmies.remove(id); // technical loss
+                dematerialized++;
                 return true;
             });
         final List<ArmyRecord> open = data.war().armies().stream().filter(ArmyRecord::open).sorted(CampaignService.byRaisedAt()).toList();
@@ -220,8 +228,14 @@ public final class ArmyManager implements GuardEvents
         final Squad squad = existing != null ? existing : new Squad(army.id(), army.dimension(), player == null ? null : player.getUUID(), gameTime);
         squads.putIfAbsent(army.id(), squad);
         // movement and the marching squad's hold on its army
-        final SoldierEntity leader = leader(squad);
-        if (path != null && leader != null)
+        final SoldierEntity leader = path == null ? null : leader(squad, path, army.outbound());
+        if (path != null && leader == null && !squad.soldiers.isEmpty())
+        {
+            // the whole squad is fighting: the army waits for it (fighting is progress, not being stuck)
+            squad.lastProgressAt = gameTime;
+            CampaignService.hold(data, army, army.heldProgress(), gameTime);
+        }
+        else if (path != null && leader != null)
         {
             final double projected = path.projectProgress(leader.position());
             final double moved = army.outbound() ? projected : -projected;
@@ -240,10 +254,10 @@ public final class ArmyManager implements GuardEvents
             CampaignService.hold(data, army, projected, gameTime);
         }
         final double now = army.progressAt(gameTime);
+        final Vec3 waypoint = battle != null ? siegeTarget(data, battle) : army.outbound() ? path.localWaypoint(now, LOOKAHEAD_BLOCKS)
+            : path.positionAt(Math.max(0.0D, now - LOOKAHEAD_BLOCKS / Math.max(1.0D, path.length())));
         for (final UUID id : squad.soldiers)
-            if (entity(squad.dimension, id) instanceof SoldierEntity soldier)
-                soldier.planTarget(battle != null ? siegeTarget(data, battle)
-                    : army.outbound() ? path.localWaypoint(now, LOOKAHEAD_BLOCKS) : path.positionAt(Math.max(0.0D, now - LOOKAHEAD_BLOCKS / Math.max(1.0D, path.length()))));
+            if (entity(squad.dimension, id) instanceof SoldierEntity soldier) soldier.planTarget(waypoint);
         // squad size
         final int remaining = battle != null ? Math.max(0, battle.attackerStrength() - battle.attackerPhysicalLosses()) : army.strength();
         final int target = Math.min(settings.maxSoldiersPerArmy(), remaining);
@@ -337,11 +351,11 @@ public final class ArmyManager implements GuardEvents
             && warPairs.contains(WarState.key(guardFaction, soldier.factionId()));
     }
 
-    /** Guards look for enemy soldiers only while some pair of factions is at war. */
+    /** A guard looks for enemy soldiers only while its own settlement's faction is at war. */
     @Override
-    public boolean active()
+    public boolean active(final SettlementGuardEntity guard)
     {
-        return server != null && !warPairs.isEmpty();
+        return server != null && !warPairs.isEmpty() && guard.settlementId() != null && settlementFactions.containsKey(guard.settlementId());
     }
 
     @Override
@@ -351,19 +365,34 @@ public final class ArmyManager implements GuardEvents
     }
 
     /**
-     * A guard died. If a soldier of the army besieging the guard's settlement killed it, the battle records one defender
-     * loss (applied once, at the battle's resolution). Returns whether it counted.
+     * A guard died. Killed by a soldier of an army at war with its settlement's faction, it is a real casualty: during
+     * the siege of that settlement the battle records one defender loss (applied once, at the battle's resolution);
+     * anywhere else (a skirmish with a marching army) the garrison loses the soldier now, once per guard. Returns
+     * whether it counted.
      */
     @Override
     public boolean guardKilled(final SettlementGuardEntity guard, final Entity killer)
     {
-        if (server == null || !(killer instanceof SoldierEntity soldier) || !isCurrent(soldier) || guard.settlementId() == null) return false;
+        if (server == null || !(killer instanceof SoldierEntity soldier) || !isCurrent(soldier) || guard.settlementId() == null
+            || !enemies(soldier, guard)) return false;
         final KingdomsSavedData data = KingdomsSavedData.get(server.overworld());
         final ArmyRecord army = data.war().army(soldier.armyId()).orElse(null);
-        if (army == null || army.status() != ArmyRecord.Status.BESIEGING || army.battleId() == null) return false;
-        final BattleRecord battle = data.war().battle(army.battleId()).orElse(null);
-        if (battle == null || !battle.open() || !battle.settlementId().equals(guard.settlementId())) return false;
-        return CampaignService.defenderFell(data, battle);
+        if (army == null || !army.open()) return false;
+        final BattleRecord battle = army.status() == ArmyRecord.Status.BESIEGING && army.battleId() != null
+            ? data.war().battle(army.battleId()).filter(BattleRecord::open).orElse(null) : null;
+        if (battle != null && battle.settlementId().equals(guard.settlementId())) return CampaignService.defenderFell(data, battle);
+        return MilitaryService.skirmishLoss(data, guard.settlementId(), guard.getUUID(), server.overworld().getGameTime()) > 0;
+    }
+
+    /** The soldier's own squad (same army, within 16 blocks, not fighting yet) turns on whoever hurt it. */
+    public void alertSquad(final SoldierEntity entity, final LivingEntity attacker)
+    {
+        if (!isCurrent(entity) || attacker == null || attacker instanceof SoldierEntity) return;
+        final Squad squad = squads.get(entity.armyId());
+        if (squad == null) return;
+        for (final UUID id : squad.soldiers)
+            if (!id.equals(entity.getUUID()) && entity(squad.dimension, id) instanceof SoldierEntity other && other.getTarget() == null
+                && other.distanceToSqr(entity) <= 16.0D * 16.0D) other.setTarget(attacker);
     }
 
     public void onSoldierHurt(final SoldierEntity entity, final DamageSource source)
@@ -422,6 +451,7 @@ public final class ArmyManager implements GuardEvents
         final WarSettings settings = settingsFromConfig();
         refreshWarCache(data);
         final Map<UUID, Integer> perPlayer = new HashMap<>();
+        squads.values().forEach(squad -> { if (squad.observer != null) perPlayer.merge(squad.observer, squad.soldiers.size(), Integer::sum); });
         final long gameTime = value.overworld().getGameTime();
         data.war().army(armyId).filter(ArmyRecord::open).ifPresent(army -> {
             for (int attempt = 0; attempt < Math.max(1, (settings.maxSoldiersPerArmy() + SPAWNS_PER_CYCLE - 1) / SPAWNS_PER_CYCLE); attempt++)
@@ -460,11 +490,29 @@ public final class ArmyManager implements GuardEvents
 
     // ------------------------------------------------------------------------------------------------ internals
 
-    private SoldierEntity leader(final Squad squad)
+    /**
+     * The squad's leader: the same soldier as long as it is free (so the stuck check compares one soldier over time);
+     * otherwise the free soldier furthest along the march. Null while every soldier is fighting.
+     */
+    private SoldierEntity leader(final Squad squad, final RoadShipmentPath path, final boolean outbound)
     {
+        if (squad.leader != null && squad.soldiers.contains(squad.leader)
+            && entity(squad.dimension, squad.leader) instanceof SoldierEntity current && current.getTarget() == null) return current;
+        SoldierEntity best = null;
+        double bestProgress = Double.NEGATIVE_INFINITY;
         for (final UUID id : squad.soldiers)
-            if (entity(squad.dimension, id) instanceof SoldierEntity soldier && soldier.getTarget() == null) return soldier;
-        return null;
+        {
+            if (!(entity(squad.dimension, id) instanceof SoldierEntity soldier) || soldier.getTarget() != null) continue;
+            final double progress = path.projectProgress(soldier.position()) * (outbound ? 1.0D : -1.0D);
+            if (progress > bestProgress)
+            {
+                best = soldier;
+                bestProgress = progress;
+            }
+        }
+        squad.leader = best == null ? null : best.getUUID();
+        squad.lastProgress = Double.NaN; // a new leader starts its own progress record
+        return best;
     }
 
     private void dematerialize(final Squad squad)

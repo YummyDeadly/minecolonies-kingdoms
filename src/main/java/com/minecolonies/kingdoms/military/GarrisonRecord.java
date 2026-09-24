@@ -98,6 +98,16 @@ public final class GarrisonRecord
         return joined;
     }
 
+    /** Soldiers join from one identified event (Phase 11 volunteers), once, never above the capacity; returns who joined. */
+    int join(final UUID eventId, final int soldiers)
+    {
+        if (!markApplied(eventId)) return 0;
+        final int joined = Math.max(0, Math.min(soldiers, capacity - strength - detached));
+        strength += joined;
+        recruited += joined;
+        return joined;
+    }
+
     /** Applies losses of one authoritative resolution once; returns the soldiers actually lost (0 if already applied). */
     int lose(final UUID eventId, final int losses)
     {

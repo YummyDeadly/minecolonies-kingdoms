@@ -475,10 +475,10 @@ public final class GarrisonManager
         return guard != null && guard.settlementId.equals(entity.settlementId());
     }
 
-    /** Whether guards may have enemies beyond bandits and monsters right now (enemy soldiers at war, Phase 10). */
-    public boolean hostilityActive()
+    /** Whether this guard may have enemies beyond bandits and monsters right now (its faction at war, Phase 10). */
+    public boolean hostilityActive(final SettlementGuardEntity guard)
     {
-        return GuardEvents.current().active();
+        return GuardEvents.current().active(guard);
     }
 
     /** Whether a guard should attack this entity beyond bandits and monsters (enemy soldiers at war, Phase 10). */
