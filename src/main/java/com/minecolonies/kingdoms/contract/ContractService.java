@@ -316,6 +316,27 @@ public final class ContractService
         return amount;
     }
 
+    // ------------------------------------------------------------------------------------------------ treasury transfers (Phase 10)
+
+    /**
+     * Moves up to {@code amount} from the payer's free treasury (reservations for accepted contracts are already set
+     * aside, so they are never touched) to the payee, in one step. Returns what was actually moved; nothing is created or
+     * destroyed. The caller guards against repeating it (a persisted flag on the war or battle).
+     */
+    public static int transferTreasury(final KingdomsSavedData data, final UUID payerId, final UUID payeeId, final int amount)
+    {
+        if (amount <= 0 || payerId == null || payeeId == null || payerId.equals(payeeId)) return 0;
+        final Faction payer = data.faction(payerId).orElse(null);
+        final Faction payee = data.faction(payeeId).orElse(null);
+        if (payer == null || payee == null) return 0;
+        final int paid = (int) Math.max(0L, Math.min(amount, payer.treasury()));
+        if (paid <= 0) return 0;
+        payer.setTreasury(payer.treasury() - paid);
+        payee.setTreasury(payee.treasury() + paid);
+        data.markChanged();
+        return paid;
+    }
+
     // ------------------------------------------------------------------------------------------------ security (Phase 8)
 
     /**
@@ -352,8 +373,9 @@ public final class ContractService
     }
 
     /**
-     * Closes every open contract that targets a resolved encounter, exactly once. An accepted contract completes when
-     * the players won and its holder fought ({@code defenders}); an escort fails if the bandits won, and a clear contract
+     * Closes every open contract that targets a resolved encounter (or battle, Phase 10), exactly once. An accepted
+     * contract completes when the players won and its holder fought ({@code defenders}); an escort or a defence fails if
+     * the bandits (the besiegers) won, and a clear contract
      * fails if its roadblock or camp outlived its lifetime ({@code clearMissed}); anything else is cancelled without
      * penalty (the objective no longer exists). Completed rewards stay pending until paid.
      */
@@ -376,7 +398,7 @@ public final class ContractService
                 data.markChanged();
                 closures.add(new Closure(contract, applyCompletionReputation(data, contract, gameTime)));
             }
-            else if ((banditsWon && contract.kind() == Contract.Kind.ESCORT_CARAVAN)
+            else if ((banditsWon && (contract.kind() == Contract.Kind.ESCORT_CARAVAN || contract.kind() == Contract.Kind.DEFEND_SETTLEMENT))
                 || (clearMissed && (contract.kind() == Contract.Kind.CLEAR_BANDITS || contract.kind() == Contract.Kind.CLEAR_CAMP)))
                 closures.add(new Closure(contract, fail(data, contract, gameTime, settings)));
             else
@@ -438,9 +460,9 @@ public final class ContractService
                 cancel(data, contract, Contract.CloseReason.SETTLEMENT_REMOVED, gameTime);
                 if (accepted) closures.add(new Closure(contract, ReputationService.Result.NONE));
             }
-            else if (contract.objective().security() && !encounterOpen(data, contract.objective().targetEncounter()))
+            else if (contract.objective().security() && !targetOpen(data, contract.objective().targetEncounter()))
             {
-                // defensive: its encounter is gone without closing it (it always closes them); never a penalty
+                // defensive: its encounter or battle is gone without closing it (they always close them); never a penalty
                 cancel(data, contract, Contract.CloseReason.OBJECTIVE_GONE, gameTime);
                 if (accepted) closures.add(new Closure(contract, ReputationService.Result.NONE));
             }
@@ -486,10 +508,12 @@ public final class ContractService
         if (released > 0) data.faction(contract.factionId()).ifPresent(faction -> faction.setTreasury(faction.treasury() + released));
     }
 
-    private static boolean encounterOpen(final KingdomsSavedData data, final UUID encounterId)
+    /** The objective of a security contract: an open bandit encounter, or an open battle for DEFEND_SETTLEMENT (Phase 10). */
+    private static boolean targetOpen(final KingdomsSavedData data, final UUID targetId)
     {
-        return encounterId != null && data.bandits().encounter(encounterId).map(com.minecolonies.kingdoms.bandit.BanditEncounter::open)
-            .orElse(false);
+        if (targetId == null) return false;
+        return data.bandits().encounter(targetId).map(com.minecolonies.kingdoms.bandit.BanditEncounter::open)
+            .or(() -> data.war().battle(targetId).map(com.minecolonies.kingdoms.war.BattleRecord::open)).orElse(false);
     }
 
     /** The settlement's colony, if it still posts contracts. */

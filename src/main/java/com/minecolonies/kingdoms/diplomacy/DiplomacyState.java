@@ -26,7 +26,13 @@ public final class DiplomacyState
         TRADE_DELIVERIES,
         ADMIN_SET,
         /** Value carried over from a save written before relation changes were audited. */
-        MIGRATED
+        MIGRATED,
+        /** A war was declared (Phase 10); evidence = the pair's war ordinal. */
+        WAR_DECLARED,
+        /** A battle between the pair was fought (Phase 10); evidence = 1 if the attacker won. */
+        WAR_BATTLE,
+        /** A war between the pair ended (Phase 10); evidence = the pair's war ordinal. */
+        PEACE
     }
 
     /** One audited relation change between an unordered pair (first &lt; second). */

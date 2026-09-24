@@ -308,6 +308,72 @@ public final class MilitaryService
         return UUID.nameUUIDFromBytes(("kingdoms-defence:" + encounterId).getBytes(StandardCharsets.UTF_8));
     }
 
+    // ------------------------------------------------------------------------------------------------ armies and battles (Phase 10)
+
+    /** Soldiers leave a garrison for an army in the same transaction that creates the army; returns how many left. */
+    public static int detach(final KingdomsSavedData data, final UUID settlementId, final int wanted)
+    {
+        final GarrisonRecord garrison = data.military().garrison(settlementId).orElse(null);
+        if (garrison == null) return 0;
+        final int left = garrison.detach(wanted);
+        data.markChanged();
+        return left;
+    }
+
+    /** An army's survivors come home, exactly once per army; returns the soldiers that came back. */
+    public static int reattach(final KingdomsSavedData data, final UUID settlementId, final int left, final int survivors, final UUID armyId)
+    {
+        final GarrisonRecord garrison = data.military().garrison(settlementId).orElse(null);
+        if (garrison == null) return 0; // the settlement is gone: its soldiers have nowhere to return
+        final int back = garrison.reattach(armyEventId(armyId), left, survivors);
+        data.markChanged();
+        return back;
+    }
+
+    /** Keeps "soldiers away" consistent with the armies actually in the field (self-healing after an unreadable record). */
+    public static int reconcileDetached(final KingdomsSavedData data, final UUID settlementId, final int inTheField)
+    {
+        final GarrisonRecord garrison = data.military().garrison(settlementId).orElse(null);
+        if (garrison == null || garrison.detached() <= inTheField) return 0;
+        final int back = garrison.reconcileDetached(inTheField);
+        data.markChanged();
+        return back;
+    }
+
+    /** A settlement's defenders lost {@code losses} soldiers in a battle; applied once per battle. */
+    public static int battleLosses(final KingdomsSavedData data, final UUID settlementId, final UUID battleId, final int losses, final long gameTime)
+    {
+        final GarrisonRecord garrison = data.military().garrison(settlementId).orElse(null);
+        if (garrison == null) return 0;
+        final int lost = garrison.lose(battleId, losses);
+        if (lost > 0) garrison.alert(gameTime + ALERT_TICKS);
+        data.markChanged();
+        return lost;
+    }
+
+    /** A settlement was sacked: its security is reduced until {@code until} (a transparent term of the breakdown). */
+    public static void sacked(final KingdomsSavedData data, final UUID settlementId, final long until)
+    {
+        data.military().garrison(settlementId).ifPresent(garrison -> {
+            garrison.vulnerable(until);
+            data.markChanged();
+        });
+    }
+
+    /** A settlement held off a siege: defence momentum, once per battle. */
+    public static void defendedBattle(final KingdomsSavedData data, final UUID settlementId, final UUID battleId, final long gameTime)
+    {
+        data.military().garrison(settlementId).ifPresent(garrison -> {
+            if (garrison.markApplied(defenceEventId(battleId))) garrison.defended(gameTime);
+            data.markChanged();
+        });
+    }
+
+    static UUID armyEventId(final UUID armyId)
+    {
+        return UUID.nameUUIDFromBytes(("kingdoms-army-return:" + armyId).getBytes(StandardCharsets.UTF_8));
+    }
+
     /** After an evaluation failed as a whole: the next attempt waits for the normal interval instead of every cycle. */
     public static void evaluationFailed(final KingdomsSavedData data, final long gameTime)
     {

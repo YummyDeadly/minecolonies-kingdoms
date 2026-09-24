@@ -23,9 +23,11 @@ public final class Contract
      * the bandit encounter ({@code targetEncounter}) that threatens the settlement's caravan ({@code targetShipment},
      * carrying {@code amount} of {@code resource}). CLEAR_BANDITS: defeat the roadblock encounter of {@code amount}
      * bandits. CLEAR_CAMP: defeat the {@code amount} bandits of a bandit camp (its camp encounter, Phase 8.1). Bandit
-     * contracts complete only through the encounter's own resolution (Phase 8).
+     * contracts complete only through the encounter's own resolution (Phase 8). DEFEND_SETTLEMENT: help the settlement
+     * beat the {@code amount} soldiers besieging it ({@code targetEncounter} is the battle, Phase 10); it completes only
+     * through the battle's own resolution.
      */
-    public enum Kind { DELIVERY, ESCORT_CARAVAN, CLEAR_BANDITS, CLEAR_CAMP }
+    public enum Kind { DELIVERY, ESCORT_CARAVAN, CLEAR_BANDITS, CLEAR_CAMP, DEFEND_SETTLEMENT }
 
     /** Immutable objective snapshot taken when the offer was posted. */
     public record Objective(Kind kind, EconomicResource resource, long amount, NeedSeverity severity, double needCurrent,
@@ -45,7 +47,7 @@ public final class Contract
                     Objects.requireNonNull(targetEncounter, "targetEncounter");
                     Objects.requireNonNull(targetShipment, "targetShipment");
                 }
-                case CLEAR_BANDITS, CLEAR_CAMP -> Objects.requireNonNull(targetEncounter, "targetEncounter");
+                case CLEAR_BANDITS, CLEAR_CAMP, DEFEND_SETTLEMENT -> Objects.requireNonNull(targetEncounter, "targetEncounter");
             }
             targetPosition = targetPosition == null ? null : targetPosition.immutable();
         }

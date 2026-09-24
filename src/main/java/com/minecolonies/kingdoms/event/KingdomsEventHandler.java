@@ -50,6 +50,8 @@ public final class KingdomsEventHandler
         com.minecolonies.kingdoms.bandit.BanditManager.getInstance().initialize(event.getServer());
         com.minecolonies.kingdoms.military.MilitaryManager.getInstance().initialize(event.getServer());
         com.minecolonies.kingdoms.military.GarrisonManager.getInstance().initialize(event.getServer());
+        com.minecolonies.kingdoms.war.WarManager.getInstance().initialize(event.getServer());
+        com.minecolonies.kingdoms.war.ArmyManager.getInstance().initialize(event.getServer());
     }
 
     @SubscribeEvent
@@ -66,6 +68,8 @@ public final class KingdomsEventHandler
         com.minecolonies.kingdoms.bandit.BanditManager.getInstance().tick(event.getServer());
         com.minecolonies.kingdoms.military.MilitaryManager.getInstance().tick(event.getServer());
         com.minecolonies.kingdoms.military.GarrisonManager.getInstance().tick(event.getServer());
+        com.minecolonies.kingdoms.war.WarManager.getInstance().tick(event.getServer());
+        com.minecolonies.kingdoms.war.ArmyManager.getInstance().tick(event.getServer());
     }
 
     @SubscribeEvent
@@ -83,6 +87,8 @@ public final class KingdomsEventHandler
         com.minecolonies.kingdoms.bandit.BanditManager.getInstance().shutdown();
         com.minecolonies.kingdoms.military.MilitaryManager.getInstance().shutdown();
         com.minecolonies.kingdoms.military.GarrisonManager.getInstance().shutdown();
+        com.minecolonies.kingdoms.war.WarManager.getInstance().shutdown();
+        com.minecolonies.kingdoms.war.ArmyManager.getInstance().shutdown();
     }
 
     @SubscribeEvent

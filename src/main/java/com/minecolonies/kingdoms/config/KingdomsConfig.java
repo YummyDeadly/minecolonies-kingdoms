@@ -141,6 +141,28 @@ public final class KingdomsConfig
         public final ModConfigSpec.IntValue guardsMaxPerPlayer;
         public final ModConfigSpec.IntValue guardsResponseRadius;
         public final ModConfigSpec.IntValue guardsMaxResponders;
+        public final ModConfigSpec.BooleanValue warEnabled;
+        public final ModConfigSpec.BooleanValue warAutonomous;
+        public final ModConfigSpec.IntValue warEvaluationIntervalTicks;
+        public final ModConfigSpec.IntValue warHostileEvaluations;
+        public final ModConfigSpec.IntValue warMaxWars;
+        public final ModConfigSpec.IntValue warMinimumArmy;
+        public final ModConfigSpec.IntValue warMaxArmySize;
+        public final ModConfigSpec.LongValue warMobilizationTicks;
+        public final ModConfigSpec.LongValue warMaxDurationTicks;
+        public final ModConfigSpec.IntValue warVictoryScore;
+        public final ModConfigSpec.LongValue warCeasefireTicks;
+        public final ModConfigSpec.LongValue warTruceTicks;
+        public final ModConfigSpec.DoubleValue warArmyTicksPerBlock;
+        public final ModConfigSpec.LongValue warSiegeTicks;
+        public final ModConfigSpec.LongValue warArmyCooldownTicks;
+        public final ModConfigSpec.LongValue warSackedTicks;
+        public final ModConfigSpec.IntValue warSoldierKillPenalty;
+        public final ModConfigSpec.IntValue soldiersMaxPerArmy;
+        public final ModConfigSpec.IntValue soldiersMaxGlobal;
+        public final ModConfigSpec.IntValue soldiersMaxPerPlayer;
+        public final ModConfigSpec.IntValue soldiersMaterializationRadius;
+        public final ModConfigSpec.IntValue soldiersDematerializationRadius;
         public final ModConfigSpec.IntValue diplomacyEvaluationIntervalTicks;
         public final ModConfigSpec.IntValue growthEvaluationIntervalTicks;
         public final ModConfigSpec.IntValue growthMaxSettlementsPerCycle;
@@ -435,6 +457,51 @@ public final class KingdomsConfig
             guardsResponseRadius = builder.comment("A physical bandit fight within this distance of a settlement gets responders from its garrison.")
                 .defineInRange("responseRadius", 320, 0, 1_024);
             guardsMaxResponders = builder.defineInRange("maxResponders", 3, 0, 8);
+            builder.pop();
+            builder.pop();
+
+            builder.push("war");
+            warEnabled = builder.comment("Wars, armies, and sieges (Phase 10). Disabling stops new armies and battles (open sieges are called off,",
+                    "armies march home); wars keep their state.")
+                .define("enabled", true);
+            warAutonomous = builder.comment("NPC factions may declare war on their own after a lasting hostile relation (operator declarations always work).")
+                .define("autonomous", true);
+            warEvaluationIntervalTicks = builder.comment("Ticks between war evaluations (hostility streaks, declarations, mobilization, war ends).")
+                .defineInRange("evaluationIntervalTicks", 24_000, 200, 720_000);
+            warHostileEvaluations = builder.comment("Consecutive hostile evaluations before a pair of neighbours can go to war.")
+                .defineInRange("hostileEvaluations", 3, 1, 100);
+            warMaxWars = builder.comment("Open wars in the world (autonomous declarations only).")
+                .defineInRange("maxWars", 2, 0, 16);
+            warMinimumArmy = builder.comment("Smallest army; a settlement that cannot field it (60% of its soldiers at home) sends none.")
+                .defineInRange("minimumArmy", 4, 1, 1_000);
+            warMaxArmySize = builder.defineInRange("maxArmySize", 40, 1, 1_000);
+            warMobilizationTicks = builder.comment("Time between a declaration and the first army.")
+                .defineInRange("mobilizationTicks", 12_000L, 0L, 7_200_000L);
+            warMaxDurationTicks = builder.comment("An active war ends by its score after this long.")
+                .defineInRange("maxDurationTicks", 168_000L, 1_200L, 72_000_000L);
+            warVictoryScore = builder.comment("War score that ends a war (each battle moves it by 25).")
+                .defineInRange("victoryScore", 50, 1, 100);
+            warCeasefireTicks = builder.defineInRange("ceasefireTicks", 24_000L, 0L, 7_200_000L);
+            warTruceTicks = builder.comment("No new war between the same pair after peace for this long.")
+                .defineInRange("truceTicks", 240_000L, 0L, 72_000_000L);
+            warArmyTicksPerBlock = builder.comment("Army travel time per effective road block (caravans use 2).")
+                .defineInRange("armyTicksPerBlock", 3.0D, 0.1D, 100.0D);
+            warSiegeTicks = builder.comment("How long a siege lasts before its abstract decision (players can help meanwhile).")
+                .defineInRange("siegeTicks", 6_000L, 200L, 720_000L);
+            warArmyCooldownTicks = builder.comment("Minimum time between two armies of one war.")
+                .defineInRange("armyCooldownTicks", 24_000L, 0L, 7_200_000L);
+            warSackedTicks = builder.comment("A sacked settlement's security is reduced for this long.")
+                .defineInRange("sackedTicks", 72_000L, 0L, 7_200_000L);
+            warSoldierKillPenalty = builder.comment("Reputation a player loses with an army's faction for killing one of its marching soldiers.")
+                .defineInRange("soldierKillPenalty", 5, 0, 100);
+            builder.push("soldiers");
+            soldiersMaxPerArmy = builder.comment("Physical soldiers of one army near players (representation only).")
+                .defineInRange("maxPerArmy", 8, 0, 32);
+            soldiersMaxGlobal = builder.defineInRange("maxGlobal", 32, 0, 256);
+            soldiersMaxPerPlayer = builder.defineInRange("maxPerPlayer", 16, 0, 64);
+            soldiersMaterializationRadius = builder.defineInRange("materializationRadius", 64, 16, 256);
+            soldiersDematerializationRadius = builder.comment("At least 16 more than the materialization radius.")
+                .defineInRange("dematerializationRadius", 96, 32, 384);
             builder.pop();
             builder.pop();
 

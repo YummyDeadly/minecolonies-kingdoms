@@ -159,11 +159,27 @@ public final class GarrisonRecord
         return leaving;
     }
 
-    /** Soldiers of an army come home (Phase 10): {@code returning} survivors of {@code left} that departed. */
-    void reattach(final int left, final int returning)
+    /**
+     * Soldiers of an army come home (Phase 10): {@code returning} survivors of {@code left} that departed, once per army
+     * ({@code eventId}); returns the soldiers that came back (0 if already applied).
+     */
+    int reattach(final UUID eventId, final int left, final int returning)
     {
+        if (!markApplied(eventId)) return 0;
         detached = Math.max(0, detached - Math.max(0, left));
-        strength += Math.max(0, Math.min(left, returning));
+        final int back = Math.max(0, Math.min(left, returning));
+        strength += back;
+        return back;
+    }
+
+    /** Soldiers counted away although no army of this settlement is in the field (an unreadable army record) come home. */
+    int reconcileDetached(final int inTheField)
+    {
+        final int stray = detached - Math.max(0, inTheField);
+        if (stray <= 0) return 0;
+        detached -= stray;
+        strength += stray;
+        return stray;
     }
 
     // ------------------------------------------------------------------------------------------------ persistence

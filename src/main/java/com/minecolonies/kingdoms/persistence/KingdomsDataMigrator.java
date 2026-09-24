@@ -41,6 +41,7 @@ public final class KingdomsDataMigrator
                 case 11 -> migrateV11ToV12(migrated);
                 case 12 -> migrateV12ToV13(migrated);
                 case 13 -> migrateV13ToV14(migrated);
+                case 14 -> migrateV14ToV15(migrated);
                 default -> throw new IllegalStateException("No migration path from schema " + version);
             };
         }
@@ -409,6 +410,17 @@ public final class KingdomsDataMigrator
     {
         if (!root.contains("military", Tag.TAG_COMPOUND)) root.put("military", new CompoundTag());
         return 14;
+    }
+
+    /**
+     * Phase 10 wars: an empty war registry (no wars, armies, or battles). Garrisons read their new fields as before; no
+     * relation, contract, or settlement changes. Faction relations stay exactly what they were: a hostile relation alone
+     * never becomes a war.
+     */
+    private static int migrateV14ToV15(final CompoundTag root)
+    {
+        if (!root.contains("war", Tag.TAG_COMPOUND)) root.put("war", new CompoundTag());
+        return 15;
     }
 
     private static int migrateV7ToV8(final CompoundTag root)

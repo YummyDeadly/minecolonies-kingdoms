@@ -74,6 +74,12 @@ public final class DiplomacyEvaluator
         return DiplomacyService.relation(first, second);
     }
 
+    /** Whether a faction takes part in diplomacy (and wars): NPC kingdoms, city states, and tribes; never players' factions. */
+    public static boolean participates(final Faction faction)
+    {
+        return PARTICIPANTS.contains(faction.type());
+    }
+
     public static Set<Pair> neighbourPairs(final KingdomsSavedData data)
     {
         final Set<Pair> pairs = new TreeSet<>((a, b) -> {

@@ -1,5 +1,6 @@
 package com.minecolonies.kingdoms.entity.guard;
 
+import com.minecolonies.kingdoms.entity.KnightAppearance;
 import com.minecolonies.kingdoms.entity.bandit.BanditEntity;
 import com.minecolonies.kingdoms.entity.caravan.CaravanMemberEntity;
 import com.minecolonies.kingdoms.entity.citizen.SettlementCitizenEntity;
@@ -48,7 +49,7 @@ import java.util.UUID;
  * creepers or endermen, so it never blows up or provokes anything in town), then walk the manager's patrol waypoint.
  * Local movement is vanilla navigation; the manager supplies sparse waypoints along the settlement's streets.
  */
-public final class SettlementGuardEntity extends PathfinderMob
+public final class SettlementGuardEntity extends PathfinderMob implements KnightAppearance
 {
     private static final EntityDataAccessor<String> TEXTURE = SynchedEntityData.defineId(SettlementGuardEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<String> TITLE = SynchedEntityData.defineId(SettlementGuardEntity.class, EntityDataSerializers.STRING);
@@ -101,7 +102,7 @@ public final class SettlementGuardEntity extends PathfinderMob
 
     public UUID settlementId() { return settlementId; }
     public UUID engagedEncounter() { return engagedEncounter; }
-    public String textureKey() { return entityData.get(TEXTURE); }
+    @Override public String textureKey() { return entityData.get(TEXTURE); }
     public Vec3 planTarget() { return planTarget; }
     public void planTarget(final Vec3 target) { planTarget = target; }
 

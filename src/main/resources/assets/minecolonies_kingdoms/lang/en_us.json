@@ -3,5 +3,6 @@
   "entity.minecolonies_kingdoms.caravan_member": "Caravan member",
   "entity.minecolonies_kingdoms.bandit": "Bandit",
   "entity.minecolonies_kingdoms.bandit_chief": "Bandit chief",
-  "entity.minecolonies_kingdoms.settlement_guard": "Settlement guard"
+  "entity.minecolonies_kingdoms.settlement_guard": "Settlement guard",
+  "entity.minecolonies_kingdoms.soldier": "Soldier"
 }

@@ -51,6 +51,15 @@ public final class ModEntities
             .updateInterval(3)
             .build(KingdomsMod.MOD_ID + ":settlement_guard"));
 
+    /** Physical soldier of a field army (Phase 10); MISC, never spawned naturally and never saved. */
+    public static final DeferredHolder<EntityType<?>, EntityType<com.minecolonies.kingdoms.entity.soldier.SoldierEntity>> SOLDIER =
+        ENTITY_TYPES.register("soldier", () -> EntityType.Builder
+            .of(com.minecolonies.kingdoms.entity.soldier.SoldierEntity::new, MobCategory.MISC)
+            .sized(0.6F, 1.95F)
+            .clientTrackingRange(10)
+            .updateInterval(3)
+            .build(KingdomsMod.MOD_ID + ":soldier"));
+
     private ModEntities()
     {
     }
@@ -71,6 +80,7 @@ public final class ModEntities
             .build());
         event.put(BANDIT.get(), com.minecolonies.kingdoms.entity.bandit.BanditEntity.createAttributes().build());
         event.put(SETTLEMENT_GUARD.get(), com.minecolonies.kingdoms.entity.guard.SettlementGuardEntity.createAttributes().build());
+        event.put(SOLDIER.get(), com.minecolonies.kingdoms.entity.soldier.SoldierEntity.createAttributes().build());
         event.put(SETTLEMENT_CITIZEN.get(), Mob.createMobAttributes()
             .add(Attributes.MAX_HEALTH, 20.0D)
             .add(Attributes.MOVEMENT_SPEED, 0.5D)

@@ -92,6 +92,8 @@ public final class KingdomsCommands
             .then(BanditCommands.banditCommand())
             .then(CampCommands.campCommand())
             .then(SecurityCommands.securityCommand())
+            .then(WarCommands.warCommand())
+            .then(WarCommands.armyCommand())
             .then(Commands.literal("simulation")
                 .requires(source -> source.hasPermission(2))
                 .executes(context -> showSimulation(context.getSource()))

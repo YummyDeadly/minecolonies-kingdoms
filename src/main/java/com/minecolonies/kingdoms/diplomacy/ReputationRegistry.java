@@ -22,9 +22,9 @@ public final class ReputationRegistry
 {
     public static final int MAX_EVENTS = 256;
 
-    /** Why a standing changed (audited). GUARD_KILLED since Phase 9. */
+    /** Why a standing changed (audited). GUARD_KILLED since Phase 9; BATTLE_DEFENDED and SOLDIERS_KILLED since Phase 10. */
     public enum Cause { CONTRACT_COMPLETED, CONTRACT_FAILED, CONTRACT_CANCELLED, REPRESENTATIVE_KILLED, ENCOUNTER_DEFENDED, SPILLOVER, ADMIN_SET, MIGRATED,
-        GUARD_KILLED }
+        GUARD_KILLED, BATTLE_DEFENDED, SOLDIERS_KILLED }
 
     /** Standing of one player with one faction plus lifetime counters for diagnostics. */
     public static final class Record
@@ -50,7 +50,7 @@ public final class ReputationRegistry
                 case CONTRACT_COMPLETED -> completed++;
                 case CONTRACT_FAILED -> failed++;
                 case CONTRACT_CANCELLED -> cancelled++;
-                case REPRESENTATIVE_KILLED, GUARD_KILLED -> killed++;
+                case REPRESENTATIVE_KILLED, GUARD_KILLED, SOLDIERS_KILLED -> killed++;
                 default -> { }
             }
         }
