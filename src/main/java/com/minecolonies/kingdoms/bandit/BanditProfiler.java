@@ -6,6 +6,9 @@ public final class BanditProfiler
     private long cycles;
     private long totalNanos;
     private long maximumNanos;
+    private long warmMaximumNanos;
+    private long warmSlowCycles;
+    private long lastSlowCycle;
     private long evaluations;
     private long planned;
     private long activated;
@@ -24,13 +27,21 @@ public final class BanditProfiler
 
     public record Stats(long cycles, double averageNanos, long maximumNanos, long evaluations, long planned, long activated,
         long abstractResolutions, long physicalResolutions, long overruns, long materializations, long materializationFailures,
-        long dematerializations, long banditDeaths, long fled, long stalls, long campsEstablished, long campRecruits, long campWorks) {}
+        long dematerializations, long banditDeaths, long fled, long stalls, long campsEstablished, long campRecruits, long campWorks,
+        long warmMaximumNanos, long warmSlowCycles, long lastSlowCycle) {}
 
     void cycle(final long nanos)
     {
         cycles++;
         totalNanos += nanos;
         maximumNanos = Math.max(maximumNanos, nanos);
+        // Separate the first minute of class loading/JIT from recurring gameplay cost; retain no samples.
+        if (cycles > 60)
+        {
+            warmMaximumNanos = Math.max(warmMaximumNanos, nanos);
+            if (nanos >= 10_000_000L) warmSlowCycles++;
+        }
+        if (nanos >= 10_000_000L) lastSlowCycle = cycles;
     }
 
     void evaluation() { evaluations++; }
@@ -54,12 +65,13 @@ public final class BanditProfiler
         cycles = totalNanos = maximumNanos = evaluations = planned = activated = abstractResolutions = physicalResolutions = 0L;
         overruns = materializations = materializationFailures = dematerializations = banditDeaths = fled = stalls = 0L;
         campsEstablished = campRecruits = campWorks = 0L;
+        warmMaximumNanos = warmSlowCycles = lastSlowCycle = 0L;
     }
 
     public Stats snapshot()
     {
         return new Stats(cycles, cycles == 0 ? 0.0D : (double) totalNanos / cycles, maximumNanos, evaluations, planned, activated,
             abstractResolutions, physicalResolutions, overruns, materializations, materializationFailures, dematerializations,
-            banditDeaths, fled, stalls, campsEstablished, campRecruits, campWorks);
+            banditDeaths, fled, stalls, campsEstablished, campRecruits, campWorks, warmMaximumNanos, warmSlowCycles, lastSlowCycle);
     }
 }

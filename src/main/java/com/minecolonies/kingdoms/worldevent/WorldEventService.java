@@ -269,13 +269,23 @@ public final class WorldEventService
             final ResourceLocation dimension = data.colony(a.capitalColonyId()).map(NPCColonyData::dimension).orElse(null);
             if (relation > -80 && data.war().state().truceUntil(a.id(), b.id()) <= gameTime)
                 all.add(new Candidate(WorldEventType.BORDER_INCIDENT, null, null, a.id(), b.id(), null, null, dimension,
-                    WorldEventType.BORDER_INCIDENT.weight(), "neighbours " + a.name() + " and " + b.name() + " (relation " + relation + ")"));
+                    incidentWeight(relation), "neighbours " + a.name() + " and " + b.name() + " (relation " + relation + ")"));
             if (relation < 60)
                 all.add(new Candidate(WorldEventType.ENVOY_VISIT, null, null, a.id(), b.id(), null, null, dimension,
                     WorldEventType.ENVOY_VISIT.weight() * (relation < -20 ? 2.0D : 1.0D),
                     "neighbours " + a.name() + " and " + b.name() + " (relation " + relation + ")"));
         }
         return all.stream().filter(candidate -> allowed(data, candidate, gameTime, settings)).toList();
+    }
+
+    /**
+     * Incidents happen more often where there is already tension (x1 at relation 0 or better, x2 at -30, x3 at -60), so
+     * that tense neighbours can drift towards the hostility the war evaluation looks for; envoys (twice as likely below
+     * -20) pull the other way. Without this, relations fall only through operator edits and wars never start by themselves.
+     */
+    public static double incidentWeight(final int relation)
+    {
+        return WorldEventType.BORDER_INCIDENT.weight() * (1.0D + Math.max(0, -relation) / 30.0D);
     }
 
     private static Optional<Candidate> harvestFailure(final SettlementRecord settlement, final NPCColonyData colony)

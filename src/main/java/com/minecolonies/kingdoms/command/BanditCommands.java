@@ -92,6 +92,9 @@ final class BanditCommands
             stats.evaluations(), stats.planned(), stats.activated(), stats.abstractResolutions(), stats.physicalResolutions(),
             stats.overruns(), stats.materializations(), stats.materializationFailures(), stats.dematerializations(), stats.banditDeaths(),
             stats.fled(), stats.stalls(), stats.averageNanos() / 1_000_000.0D, stats.maximumNanos() / 1_000_000.0D, stats.cycles())), false);
+        source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
+            "after first 60 cycles: max=%.3fms cycles>=10ms=%d lastSlowCycle=%d",
+            stats.warmMaximumNanos() / 1_000_000.0D, stats.warmSlowCycles(), stats.lastSlowCycle())), false);
         return 1;
     }
 

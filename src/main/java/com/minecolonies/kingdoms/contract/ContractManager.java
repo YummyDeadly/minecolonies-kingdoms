@@ -133,7 +133,7 @@ public final class ContractManager
             contract.resource(), settlementName(data, contract), player.getGameProfile().getName(), contract.reservedReward());
         if (contract.kind() != Contract.Kind.DELIVERY)
             return Component.literal("Accepted for " + settlementName(data, contract) + ": " + ContractText.describe(contract) + ", for "
-                + contract.agreedReward() + " emeralds. The contract completes when you defeat those bandits.").withStyle(ChatFormatting.GREEN);
+                + contract.agreedReward() + " emeralds. Help win the indicated encounter to complete this contract.").withStyle(ChatFormatting.GREEN);
         return Component.literal("Accepted: deliver " + ContractText.amount(contract.resource(), contract.amount()) + " to "
             + settlementName(data, contract) + " within " + ContractText.duration(contract.deadline() - gameTime(player))
             + " for " + contract.agreedReward() + " emeralds. ").withStyle(ChatFormatting.GREEN)

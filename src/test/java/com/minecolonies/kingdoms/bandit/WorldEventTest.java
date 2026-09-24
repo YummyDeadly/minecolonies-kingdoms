@@ -163,6 +163,22 @@ class WorldEventTest
         assertTrue(WorldEventService.choose(List.of(), 1L).isEmpty());
     }
 
+    @Test
+    void tensionMakesIncidentsLikelierAndEnvoysPullBack()
+    {
+        assertEquals(2.0D, WorldEventService.incidentWeight(40), EPSILON, "friendly neighbours: base weight");
+        assertEquals(2.0D, WorldEventService.incidentWeight(0), EPSILON);
+        assertEquals(4.0D, WorldEventService.incidentWeight(-30), EPSILON);
+        assertEquals(6.0D, WorldEventService.incidentWeight(-60), EPSILON);
+        final KingdomsSavedData data = farming();
+        DiplomacyService.set(data, data.faction(FA).orElseThrow(), data.faction(FB).orElseThrow(), -45, DiplomacyState.Cause.ADMIN_SET, 0L, 0L);
+        final List<WorldEventService.Candidate> candidates = WorldEventService.candidates(data, 0L, EVENTS);
+        final double incident = candidates.stream().filter(value -> value.type() == WorldEventType.BORDER_INCIDENT).findFirst().orElseThrow().weight();
+        final double envoy = candidates.stream().filter(value -> value.type() == WorldEventType.ENVOY_VISIT).findFirst().orElseThrow().weight();
+        assertEquals(5.0D, incident, EPSILON);
+        assertEquals(4.0D, envoy, EPSILON, "envoys are twice as likely below -20");
+    }
+
     // ------------------------------------------------------------------------------------------------ effects through authorities
 
     @Test

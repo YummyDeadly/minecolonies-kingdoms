@@ -101,4 +101,6 @@ The jar is produced in `build/libs/`. Server configuration is generated as `conf
 - [World events and history](docs/WORLD_EVENTS.md)
 - [MineColonies integration](docs/MINECOLONIES_INTEGRATION.md)
 - [Dedicated-server smoke test](docs/SMOKE_TEST.md)
+- [Playable alpha acceptance checklist](docs/PLAYABLE_ALPHA_ACCEPTANCE.md)
+- [Final engineering report](docs/ALPHA_ENGINEERING_REPORT.md)
 - [Roadmap](docs/ROADMAP.md)
