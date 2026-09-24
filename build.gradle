@@ -1,0 +1,94 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.gradle.userdev' version '7.0.+'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+repositories {
+    maven {
+        name = 'LDTTeam - Modding'
+        url = 'https://ldtteam.jfrog.io/ldtteam/modding/'
+    }
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version as int)
+    withSourcesJar()
+}
+
+dependencies {
+    implementation "net.neoforged:neoforge:${neo_version}"
+
+    implementation("com.ldtteam:minecolonies:${minecolonies_version}") {
+        transitive = false
+    }
+    implementation("com.ldtteam:structurize:${structurize_version}") {
+        transitive = false
+    }
+    implementation("com.ldtteam:blockui:${blockui_version}") {
+        transitive = false
+    }
+    implementation("com.ldtteam:domum-ornamentum:${domum_ornamentum_version}") {
+        transitive = false
+    }
+    implementation("com.ldtteam:multipiston:${multipiston_version}") {
+        transitive = false
+    }
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+runs {
+    configureEach {
+        systemProperty 'forge.logging.markers', 'REGISTRIES'
+        systemProperty 'forge.logging.console.level', 'info'
+        modSource project.sourceSets.main
+    }
+
+    client {
+        def quickPlayWorld = providers.gradleProperty('quickPlaySingleplayer')
+        if (quickPlayWorld.present) {
+            argument '--quickPlaySingleplayer'
+            argument quickPlayWorld.get()
+        }
+    }
+
+    server {
+        argument '--nogui'
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+}
+
+tasks.withType(ProcessResources).configureEach {
+    def replaceProperties = [
+        minecraft_version_range: minecraft_version_range,
+        neo_version: neo_version,
+        loader_version_range: loader_version_range,
+        mod_id: mod_id,
+        mod_name: mod_name,
+        mod_license: mod_license,
+        mod_version: mod_version,
+        mod_authors: mod_authors,
+        mod_description: mod_description,
+        minecolonies_version: minecolonies_version
+    ]
+    inputs.properties replaceProperties
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand replaceProperties
+    }
+}
