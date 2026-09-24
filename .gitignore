@@ -27,3 +27,5 @@ hs_err_pid*.log
 
 # Local agent contract (kept out of git at the owner's request)
 CLAUDE.md
+
+docs/
