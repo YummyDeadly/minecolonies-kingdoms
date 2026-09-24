@@ -1,12 +1,29 @@
+# Gradle and build output
 .gradle/
 build/
+out/
+bin/
+
+# NeoGradle run directories (worlds, configs, logs of local test runs)
 run/
 runs/
-out/
+
+# IDE files
 *.iml
+*.ipr
+*.iws
 .idea/
+.vscode/
+.classpath
+.project
+.settings/
+
+# Diagnostics
 logs/
 *.log
 *.log.gz
 thread-dump*.txt
+hs_err_pid*.log
+
+# Local agent contract (kept out of git at the owner's request)
 CLAUDE.md

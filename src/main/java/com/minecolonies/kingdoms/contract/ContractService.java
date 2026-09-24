@@ -75,6 +75,12 @@ public final class ContractService
         Runnable remove(List<ContractRules.Removal> removals);
 
         void give(int emeralds);
+
+        /**
+         * Whether items given now actually reach the player. A player on the death screen still has an inventory, but
+         * it is discarded on respawn (without keepInventory), so a reward given then would be lost while marked paid.
+         */
+        default boolean canReceive() { return true; }
     }
 
     public record Delivery(Optional<Refusal> refusal, long units, long credited, boolean completed, int payout,
@@ -301,7 +307,7 @@ public final class ContractService
 
     private static int issueReward(final KingdomsSavedData data, final Contract contract, final InventoryPort inventory, final long gameTime)
     {
-        if (!contract.rewardPending()) return 0;
+        if (!contract.rewardPending() || !inventory.canReceive()) return 0; // stays pending, paid once on a later action
         final int amount = contract.reservedReward();
         if (amount > 0) inventory.give(amount); // throws before giving anything: the reward stays pending
         contract.releaseReservation();

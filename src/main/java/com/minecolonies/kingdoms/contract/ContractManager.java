@@ -200,7 +200,9 @@ public final class ContractManager
     {
         final KingdomsSavedData data = KingdomsSavedData.get(player.serverLevel());
         if (data.contracts().pendingRewards(player.getUUID()).isEmpty()) return Optional.empty();
-        final int paid = ContractService.claimPendingRewards(data, player.getUUID(), new PlayerInventory(player), gameTime(player));
+        final PlayerInventory inventory = new PlayerInventory(player);
+        if (!inventory.canReceive()) return Optional.empty(); // dead or leaving: the reward stays pending
+        final int paid = ContractService.claimPendingRewards(data, player.getUUID(), inventory, gameTime(player));
         KingdomsMod.LOGGER.info("Issued {} pending contract emeralds to {}", paid, player.getGameProfile().getName());
         return Optional.of(Component.literal("You receive " + paid + " emeralds still owed to you for completed contracts.")
             .withStyle(ChatFormatting.GREEN));
@@ -290,6 +292,12 @@ public final class ContractManager
             for (int remaining = emeralds; remaining > 0; remaining -= 64) stacks.add(new ItemStack(Items.EMERALD, Math.min(64, remaining)));
             for (final ItemStack stack : stacks)
                 if (!player.getInventory().add(stack) && !stack.isEmpty()) player.drop(stack, false);
+        }
+
+        @Override
+        public boolean canReceive()
+        {
+            return player.isAlive() && !player.hasDisconnected() && !player.isRemoved();
         }
     }
 }

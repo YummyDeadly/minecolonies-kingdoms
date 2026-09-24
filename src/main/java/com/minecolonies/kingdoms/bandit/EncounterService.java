@@ -195,7 +195,11 @@ public final class EncounterService
         return cancelled;
     }
 
-    /** Keeps abstract shipments of active ambushes held (a caravan that just dematerialized would otherwise move on). */
+    /**
+     * Keeps abstract shipments of active ambushes held (a caravan that just dematerialized would otherwise move on).
+     * The hold always reaches past the next cycle, so a long physical fight past {@code resolveAt} cannot let the
+     * caravan creep forward between cycles; the resolution releases it.
+     */
     public static void enforceHolds(final KingdomsSavedData data, final long gameTime)
     {
         for (final BanditEncounter encounter : data.bandits().open())
@@ -203,10 +207,13 @@ public final class EncounterService
             if (encounter.status() != BanditEncounter.Status.ACTIVE || encounter.kind() != BanditEncounter.Kind.AMBUSH) continue;
             data.tradeLedger().shipment(encounter.shipmentId())
                 .filter(shipment -> shipment.status() == TradeShipmentStatus.IN_TRANSIT
-                    && shipment.representation() == ShipmentRepresentation.ABSTRACT && !shipment.heldAt(gameTime))
-                .ifPresent(shipment -> shipment.holdUntil(gameTime, Math.max(gameTime + 1L, encounter.resolveAt())));
+                    && shipment.representation() == ShipmentRepresentation.ABSTRACT && !shipment.heldAt(gameTime + HOLD_MARGIN_TICKS / 2))
+                .ifPresent(shipment -> shipment.holdUntil(gameTime, Math.max(gameTime + HOLD_MARGIN_TICKS, encounter.resolveAt())));
         }
     }
+
+    /** How far past the current time an enforced hold reaches (two 20-tick bandit cycles). */
+    static final long HOLD_MARGIN_TICKS = 40L;
 
     // ------------------------------------------------------------------------------------------------ resolution
 
@@ -274,7 +281,11 @@ public final class EncounterService
         return new Resolution(true, encounter, 0L, closures, java.util.Map.of());
     }
 
-    /** Resolves unobserved ambushes that are due and expires roadblocks whose lifetime is over. */
+    /**
+     * Resolves unobserved ambushes that are due and expires roadblocks whose lifetime is over. An abstract encounter
+     * whose bandits were all killed (the last one died just before a restart, a dematerialization, or while bandits
+     * were disabled) is settled as the victory it was, never as an expiry or a roll.
+     */
     public static List<Resolution> resolveDue(final KingdomsSavedData data, final long gameTime, final BanditSettings settings,
         final ContractSettings contractSettings)
     {
@@ -283,7 +294,11 @@ public final class EncounterService
         {
             if (encounter.status() != BanditEncounter.Status.ACTIVE || encounter.representation() != BanditEncounter.Representation.ABSTRACT)
                 continue;
-            if (encounter.kind() == BanditEncounter.Kind.AMBUSH && gameTime >= encounter.resolveAt())
+            if (encounter.remainingStrength() <= 0)
+                resolutions.add(resolve(data, encounter, new EncounterRules.Decision(EncounterRules.Outcome.BANDITS_DEFEATED, 0.0D, 0L),
+                    encounter.defenders().isEmpty() ? BanditEncounter.Cause.CARAVAN_GUARDS : BanditEncounter.Cause.PLAYER_VICTORY,
+                    List.of(), gameTime, settings, contractSettings));
+            else if (encounter.kind() == BanditEncounter.Kind.AMBUSH && gameTime >= encounter.resolveAt())
                 resolutions.add(resolve(data, encounter, EncounterRules.decideAbstract(encounter.seed(), encounter.remainingStrength(),
                     security(data, encounter)), BanditEncounter.Cause.ABSTRACT_ROLL, List.of(), gameTime, settings, contractSettings));
             else if (encounter.kind() == BanditEncounter.Kind.ROADBLOCK && gameTime >= encounter.expiresAt())

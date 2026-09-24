@@ -170,6 +170,88 @@ class BanditContractTest
         assertEquals(-CONTRACTS.failPenalty(), ReputationService.standing(data, PLAYER, issuerFaction), "once");
     }
 
+    /** A player on the death screen: whatever is given now is discarded on respawn. */
+    private static final class DeadWallet implements ContractService.InventoryPort
+    {
+        int emeralds;
+        @Override public List<ContractRules.Slot> slots(final EconomicResource resource) { return List.of(); }
+        @Override public Runnable remove(final List<ContractRules.Removal> removals) { return () -> { }; }
+        @Override public void give(final int amount) { emeralds += amount; }
+        @Override public boolean canReceive() { return false; }
+    }
+
+    @Test
+    void aRewardOwedToADeadPlayerStaysPendingAndIsPaidOnceAfterRespawn()
+    {
+        final KingdomsSavedData data = world();
+        final BanditEncounter roadblock = EncounterService.createRoadblock(data, data.roads().get(ROAD).orElseThrow(), anchors(data), 0L,
+            SETTINGS, true).orElseThrow();
+        SecurityContracts.post(data, 10L, SETTINGS, CONTRACTS);
+        final Contract clear = data.contracts().targeting(roadblock.id()).getFirst();
+        assertTrue(ContractService.accept(data, PLAYER, clear, 20L, CONTRACTS).isEmpty());
+        defeat(data, roadblock, 100L, PLAYER); // won by a helper while the holder lies dead
+        assertEquals(ContractStatus.COMPLETED, clear.status());
+        final DeadWallet dead = new DeadWallet();
+        assertEquals(0, ContractService.claimPendingRewards(data, PLAYER, dead, 110L));
+        assertEquals(0, dead.emeralds, "nothing is handed to a dead player");
+        assertTrue(clear.rewardPending(), "the reward stays owed");
+        final KingdomsSavedData restarted = PersistenceTestAccess.reload(data);
+        final Wallet alive = new Wallet();
+        assertEquals(clear.agreedReward(), ContractService.claimPendingRewards(restarted, PLAYER, alive, 200L));
+        assertEquals(0, ContractService.claimPendingRewards(restarted, PLAYER, alive, 201L), "and paid exactly once");
+        assertEquals(clear.agreedReward(), alive.emeralds);
+    }
+
+    @Test
+    void aWinWhoseLastBanditDiedJustBeforeARestartIsStillAWin()
+    {
+        final KingdomsSavedData data = world();
+        final BanditEncounter roadblock = EncounterService.createRoadblock(data, data.roads().get(ROAD).orElseThrow(), anchors(data), 0L,
+            SETTINGS, true).orElseThrow();
+        SecurityContracts.post(data, 10L, SETTINGS, CONTRACTS);
+        final Contract clear = data.contracts().targeting(roadblock.id()).getFirst();
+        assertTrue(ContractService.accept(data, PLAYER, clear, 20L, CONTRACTS).isEmpty());
+        // the physical fight: the holder kills every bandit, and the server stops before the next manager cycle
+        roadblock.defender(PLAYER);
+        while (roadblock.remainingStrength() > 0) roadblock.banditLost();
+        final KingdomsSavedData restarted = PersistenceTestAccess.reload(data);
+        final BanditEncounter reloaded = restarted.bandits().encounter(roadblock.id()).orElseThrow();
+        assertEquals(BanditEncounter.Representation.ABSTRACT, reloaded.representation());
+        final List<EncounterService.Resolution> settled = EncounterService.resolveDue(restarted, 500L, SETTINGS, CONTRACTS);
+        assertEquals(1, settled.size(), "settled on the next cycle, long before the roadblock would expire");
+        assertEquals(BanditEncounter.Status.RESOLVED_PLAYER, reloaded.status());
+        final Contract reloadedClear = restarted.contracts().get(clear.id()).orElseThrow();
+        assertEquals(ContractStatus.COMPLETED, reloadedClear.status(), "the holder's win is kept, not failed as an expiry");
+        assertEquals(SecurityContracts.CLEAR_REPUTATION, ReputationService.standing(restarted, PLAYER, reloadedClear.factionId()));
+        assertTrue(EncounterService.resolveDue(restarted, 600L, SETTINGS, CONTRACTS).isEmpty(), "once");
+
+        final KingdomsSavedData guarded = world();
+        final TradeShipment shipment = shipment(guarded, "guarded", 100, 0L, 4_000L);
+        final BanditEncounter ambush = ambush(guarded, shipment, 0L);
+        activate(guarded, ambush, shipment);
+        while (ambush.remainingStrength() > 0) ambush.banditLost();
+        EncounterService.resolveDue(guarded, ambush.activatedAt() + 40L, SETTINGS, CONTRACTS);
+        assertEquals(BanditEncounter.Status.RESOLVED_CARAVAN, ambush.status());
+        assertEquals(BanditEncounter.Cause.CARAVAN_GUARDS, ambush.cause(), "nobody fought: the caravan guards won");
+        assertEquals(0L, shipment.lostAmount());
+    }
+
+    @Test
+    void enforcedHoldsNeverLetACaravanCreepForwardDuringALongFight()
+    {
+        final KingdomsSavedData data = world();
+        final TradeShipment shipment = shipment(data, "creep", 100, 0L, 4_000L);
+        final BanditEncounter encounter = ambush(data, shipment, 0L);
+        activate(data, encounter, shipment);
+        encounter.representation(BanditEncounter.Representation.PHYSICAL); // a player fights on past resolveAt
+        final double held = shipment.progressAt(encounter.activatedAt());
+        for (long time = encounter.resolveAt(); time < encounter.resolveAt() + 2_000L; time += BanditManager.CYCLE_TICKS)
+        {
+            EncounterService.enforceHolds(data, time);
+            assertEquals(held, shipment.progressAt(time + BanditManager.CYCLE_TICKS - 1L), 1.0E-9, "no progress between cycles");
+        }
+    }
+
     @Test
     void securityContractsAreDecidedByTheirEncounterNotByTheClock()
     {

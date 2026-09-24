@@ -136,7 +136,9 @@ public final class BanditEntity extends Monster
     @Override
     public void die(final DamageSource source)
     {
+        final boolean wasDead = dead;
         super.die(source);
+        if (wasDead || !dead) return; // a cancelled death (LivingDeathEvent) or a repeated call reports nothing
         if (!managerDiscard && !level().isClientSide)
             BanditManager.getInstance().onBanditDeath(this, source.getEntity() instanceof ServerPlayer player ? player : null);
     }
