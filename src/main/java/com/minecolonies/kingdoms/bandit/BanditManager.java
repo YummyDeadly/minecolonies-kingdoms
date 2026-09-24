@@ -215,8 +215,7 @@ public final class BanditManager
             }
             if (presence.size() == 0 && encounter.remainingStrength() == 0)
             {
-                final BanditEncounter.Cause cause = encounter.defenders().isEmpty()
-                    ? BanditEncounter.Cause.CARAVAN_GUARDS : BanditEncounter.Cause.PLAYER_VICTORY;
+                final BanditEncounter.Cause cause = EncounterService.victoryCause(encounter);
                 profiler.physicalResolution();
                 finish(data, EncounterService.resolve(data, encounter, new EncounterRules.Decision(EncounterRules.Outcome.BANDITS_DEFEATED,
                     0.0D, 0L), cause, List.of(), gameTime, settings, contracts));
@@ -336,6 +335,12 @@ public final class BanditManager
         for (final UUID id : entities) if (level.getEntity(id) instanceof BanditEntity bandit) bandit.discardByManager();
     }
 
+    /** A resolution made elsewhere (a garrison patrol, Phase 9): remove bandits and tell the people involved. */
+    public void announce(final KingdomsSavedData data, final EncounterService.Resolution resolution)
+    {
+        finish(data, resolution);
+    }
+
     /** After a resolution: remove bandits, tell the people involved, and pay rewards that are now due. */
     private void finish(final KingdomsSavedData data, final EncounterService.Resolution resolution)
     {
@@ -375,7 +380,8 @@ public final class BanditManager
         if (encounter.outcome() == null) return "The bandit threat is gone.";
         return switch (encounter.outcome())
         {
-            case BANDITS_DEFEATED -> switch (encounter.kind())
+            case BANDITS_DEFEATED -> (encounter.status() == BanditEncounter.Status.RESOLVED_GARRISON ? "Settlement guards beat the bandits. " : "")
+                + switch (encounter.kind())
             {
                 case AMBUSH -> "The bandits are beaten; the caravan continues.";
                 case ROADBLOCK -> "The road is clear of bandits.";
@@ -408,6 +414,12 @@ public final class BanditManager
     /** One bandit died: the encounter's persisted strength drops by one (no reward, no reputation per kill). */
     public void onBanditDeath(final BanditEntity bandit, final ServerPlayer killer)
     {
+        onBanditDeath(bandit, killer, null);
+    }
+
+    /** {@code guardSettlement}: the settlement whose guard killed the bandit (Phase 9), credited as a garrison defender. */
+    public void onBanditDeath(final BanditEntity bandit, final ServerPlayer killer, final UUID guardSettlement)
+    {
         if (!isCurrent(bandit) || server == null) return;
         final KingdomsSavedData data = KingdomsSavedData.get(server.overworld());
         roster.presence(bandit.encounterId()).ifPresent(presence -> presence.progress(server.overworld().getGameTime()));
@@ -415,6 +427,7 @@ public final class BanditManager
         profiler.banditDeath();
         data.bandits().encounter(bandit.encounterId()).filter(BanditEncounter::open).ifPresent(encounter -> {
             if (killer != null) EncounterService.recordDefender(data, encounter, killer.getUUID());
+            if (guardSettlement != null) EncounterService.recordGarrisonDefender(data, encounter, guardSettlement);
             encounter.banditLost();
             data.markChanged();
         });
@@ -572,6 +585,44 @@ public final class BanditManager
     }
 
     public record PhysicalSnapshot(UUID encounterId, UUID observer, int bandits, long since) {}
+
+    /** Where a physical bandit fight is (for garrison responders, Phase 9). */
+    public record PhysicalSite(UUID encounterId, ResourceLocation dimension, BlockPos position) {}
+
+    /** Open encounters that are physical right now, with their positions. */
+    public List<PhysicalSite> physicalSites()
+    {
+        if (server == null) return List.of();
+        final KingdomsSavedData data = KingdomsSavedData.get(server.overworld());
+        final List<PhysicalSite> sites = new ArrayList<>();
+        for (final UUID encounterId : roster.encounterIds())
+            data.bandits().encounter(encounterId).filter(BanditEncounter::open)
+                .ifPresent(encounter -> sites.add(new PhysicalSite(encounter.id(), encounter.dimension(), encounter.position())));
+        return sites;
+    }
+
+    /**
+     * Whether the physical world has a stake in this fight right now (Phase 9 patrols leave it alone): it is physical,
+     * held by an operator, suppressed after a stall or a failed spawn, or a player is within the dematerialization radius.
+     */
+    public boolean observed(final BanditEncounter encounter)
+    {
+        if (server == null) return false;
+        final long gameTime = server.overworld().getGameTime();
+        if (roster.physical(encounter.id()) || roster.held(encounter.id(), gameTime) || !roster.mayMaterialize(encounter.id(), gameTime)) return true;
+        final ServerLevel level = level(encounter.dimension());
+        if (level == null) return false;
+        final double radius = settingsFromConfig().dematerializationRadius();
+        return nearestPlayerDistance(level, Vec3.atCenterOf(encounter.position())) <= radius;
+    }
+
+    /** A settlement's responder was killed by the bandits of this encounter (applied to the garrison when it ends). */
+    public void recordGarrisonLoss(final UUID encounterId, final UUID settlementId)
+    {
+        if (server == null) return;
+        final KingdomsSavedData data = KingdomsSavedData.get(server.overworld());
+        data.bandits().encounter(encounterId).ifPresent(encounter -> EncounterService.recordGarrisonLoss(data, encounter, settlementId));
+    }
 
     public Optional<PhysicalSnapshot> physicalOf(final UUID encounterId)
     {

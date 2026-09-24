@@ -40,6 +40,7 @@ public final class KingdomsDataMigrator
                 case 10 -> migrateV10ToV11(migrated);
                 case 11 -> migrateV11ToV12(migrated);
                 case 12 -> migrateV12ToV13(migrated);
+                case 13 -> migrateV13ToV14(migrated);
                 default -> throw new IllegalStateException("No migration path from schema " + version);
             };
         }
@@ -397,6 +398,17 @@ public final class KingdomsDataMigrator
         final CompoundTag bandits = root.getCompound("bandits");
         if (!bandits.contains("camps", Tag.TAG_LIST)) bandits.put("camps", new ListTag());
         return 13;
+    }
+
+    /**
+     * Phase 9 security: an empty military registry. Garrisons are created on the first security evaluation from each
+     * settlement's recorded soldiers (capped by its capacity), so existing settlements keep their defenders. Bandit
+     * encounters read the new garrison fields as none; nothing else changes.
+     */
+    private static int migrateV13ToV14(final CompoundTag root)
+    {
+        if (!root.contains("military", Tag.TAG_COMPOUND)) root.put("military", new CompoundTag());
+        return 14;
     }
 
     private static int migrateV7ToV8(final CompoundTag root)

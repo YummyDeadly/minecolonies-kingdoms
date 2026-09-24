@@ -2,14 +2,14 @@
 
 MineColonies: Kingdoms is a server-authoritative NeoForge addon that adds a persistent strategic layer above MineColonies. MineColonies remains authoritative for colonies, citizens, buildings, jobs, construction, requests, warehouses, couriers, guards, and claims.
 
-The current Phase 1–8.1 foundation provides:
+The current Phase 1–9 foundation provides:
 
 - persistent factions, kingdoms, strategic colony records, economy, needs, and decisions;
 - public-API MineColonies lifecycle synchronization and warehouse observation;
 - a bounded round-robin world simulation with active/abstract modes and hysteresis;
 - separate player and AI controllers (AI currently records intent and never orders construction);
 - configurable tick intervals, batch size, time budget, and activation radii;
-- sequential save-schema migration from version 1 through version 13;
+- sequential save-schema migration from version 1 through version 14;
 - commands and cumulative timings for diagnostics.
 - strategic NPC colonies that do not require a physical Town Hall;
 - deterministic offer/demand matching, persistent routes, and restart-safe abstract shipments;
@@ -30,6 +30,7 @@ The current Phase 1–8.1 foundation provides:
   - player intervention with one-time defender reputation;
   - escort and clear-the-road contracts built on the Phase 7 contract service.
 - Phase 8.1 bandit camps: roads that stay dangerous get a small camp beside them (deterministic, capped, with cooldowns); an active camp raises its road's threat; clearing it suppresses the road and pays a clear-the-camp contract exactly once; the physical camp is placed only on wild, owned land and taken down again after the camp ends.
+- Phase 9 settlement security: every NPC settlement keeps a persisted garrison (capacity from type, population and civic buildings; daily recruitment); a transparent security value from the garrison, civic buildings, recent defences and road danger now drives the road threat model; garrisons send seeded, exactly-once patrols against nearby unobserved bandit camps; near players a few physical guards patrol the local streets and respond to physical bandit fights, with caps and hysteresis. Guard deaths are technical losses unless they die to the bandits they were sent to (applied once when that fight ends); killing a guard costs reputation.
 
 No Mixins, reflection, or MineColonies source changes are used.
 
@@ -69,7 +70,8 @@ The jar is produced in `build/libs/`. Server configuration is generated as `conf
 - `/kingdoms reputation`, `/kingdoms contract list|offers|accept|deliver|abandon` (players)
 - `/kingdoms reputation of|history|set`, `/kingdoms contract all|refresh|cancel|stats`, `/kingdoms diplomacy list|info|events|evaluate|set` (operator)
 - `/kingdoms bandit stats|list|info|threat|evaluate|spawn-test|set-threat|materialize|dematerialize|resolve` (operator)
-- `/kingdoms camp list|info|spawn-test|build|remove` (operator)
+- `/kingdoms camp list|info|spawn-test|build|remove|disband` (operator)
+- `/kingdoms security list|info|stats|evaluate|set-garrison|guards` (operator)
 - `/kingdoms simulation` and `/kingdoms simulation stats` (operator)
 - `/kingdoms debug` (operator)
 
@@ -86,6 +88,7 @@ The jar is produced in `build/libs/`. Server configuration is generated as `conf
 - [Reputation, contracts, and diplomacy](docs/DIPLOMACY.md)
 - [Bandits, threats, and caravan ambushes](docs/BANDITS.md)
 - [Bandit camps](docs/BANDIT_CAMPS.md)
+- [Settlement security, garrisons, and guards](docs/SECURITY.md)
 - [MineColonies integration](docs/MINECOLONIES_INTEGRATION.md)
 - [Dedicated-server smoke test](docs/SMOKE_TEST.md)
 - [Roadmap](docs/ROADMAP.md)

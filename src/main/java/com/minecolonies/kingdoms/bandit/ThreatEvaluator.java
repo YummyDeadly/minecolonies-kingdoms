@@ -45,8 +45,9 @@ public final class ThreatEvaluator
             if (!eligible(road)) continue;
             roads.add(road.id());
             final RoadThreat threat = registry.threatFor(road.id());
-            final int security = data.settlements().get(road.firstSettlementId()).map(value -> ThreatRules.security(value.type())).orElse(0)
-                + data.settlements().get(road.secondSettlementId()).map(value -> ThreatRules.security(value.type())).orElse(0);
+            // security of both endpoints: their garrisons' security level (Phase 9), the archetype before the first evaluation
+            final int security = com.minecolonies.kingdoms.military.MilitaryService.level(data, road.firstSettlementId())
+                + com.minecolonies.kingdoms.military.MilitaryService.level(data, road.secondSettlementId());
             threat.evaluate(ThreatRules.contributors(settings.baseThreat(), threat.recentTraffic(), remoteLength.applyAsDouble(road),
                 threat.raidMomentum(), CampService.contribution(data, road.id(), settings), security, threat.suppressedAt(gameTime)),
                 settings.threatStep(), gameTime);

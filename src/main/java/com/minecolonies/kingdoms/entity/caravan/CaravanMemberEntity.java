@@ -127,4 +127,8 @@ public final class CaravanMemberEntity extends PathfinderMob
             role = CaravanMemberRole.GUARD;
         }
     }
+
+    /** Never through portals: that would load chunks in another dimension; the caravan manager owns where it is. */
+    @Override
+    public boolean canUsePortal(final boolean allowPassengers) { return false; }
 }

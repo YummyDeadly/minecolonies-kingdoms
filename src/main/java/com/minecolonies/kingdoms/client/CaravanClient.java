@@ -28,5 +28,6 @@ public final class CaravanClient
         event.registerEntityRenderer(ModEntities.CARAVAN_MEMBER.get(), CaravanMemberRenderer::new);
         event.registerEntityRenderer(ModEntities.SETTLEMENT_CITIZEN.get(), SettlementCitizenRenderer::new);
         event.registerEntityRenderer(ModEntities.BANDIT.get(), BanditRenderer::new);
+        event.registerEntityRenderer(ModEntities.SETTLEMENT_GUARD.get(), GuardRenderer::new);
     }
 }

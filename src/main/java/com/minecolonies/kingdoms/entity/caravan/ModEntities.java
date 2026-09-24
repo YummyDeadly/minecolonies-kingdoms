@@ -42,6 +42,15 @@ public final class ModEntities
             .updateInterval(3)
             .build(KingdomsMod.MOD_ID + ":bandit"));
 
+    /** Physical guard of a settlement garrison (Phase 9); MISC like residents, never spawned naturally and never saved. */
+    public static final DeferredHolder<EntityType<?>, EntityType<com.minecolonies.kingdoms.entity.guard.SettlementGuardEntity>> SETTLEMENT_GUARD =
+        ENTITY_TYPES.register("settlement_guard", () -> EntityType.Builder
+            .of(com.minecolonies.kingdoms.entity.guard.SettlementGuardEntity::new, MobCategory.MISC)
+            .sized(0.6F, 1.95F)
+            .clientTrackingRange(10)
+            .updateInterval(3)
+            .build(KingdomsMod.MOD_ID + ":settlement_guard"));
+
     private ModEntities()
     {
     }
@@ -61,6 +70,7 @@ public final class ModEntities
             .add(Attributes.FOLLOW_RANGE, 24.0D)
             .build());
         event.put(BANDIT.get(), com.minecolonies.kingdoms.entity.bandit.BanditEntity.createAttributes().build());
+        event.put(SETTLEMENT_GUARD.get(), com.minecolonies.kingdoms.entity.guard.SettlementGuardEntity.createAttributes().build());
         event.put(SETTLEMENT_CITIZEN.get(), Mob.createMobAttributes()
             .add(Attributes.MAX_HEALTH, 20.0D)
             .add(Attributes.MOVEMENT_SPEED, 0.5D)

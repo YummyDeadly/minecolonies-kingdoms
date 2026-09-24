@@ -27,7 +27,7 @@ import java.util.UUID;
 public final class KingdomsSavedData extends SavedData
 {
     public static final String DATA_NAME = "minecolonies_kingdoms";
-    public static final int DATA_VERSION = 13;
+    public static final int DATA_VERSION = 14;
     public static final SavedData.Factory<KingdomsSavedData> FACTORY =
         new SavedData.Factory<>(KingdomsSavedData::new, KingdomsSavedData::load);
 
@@ -44,6 +44,7 @@ public final class KingdomsSavedData extends SavedData
     private com.minecolonies.kingdoms.diplomacy.DiplomacyState diplomacy = new com.minecolonies.kingdoms.diplomacy.DiplomacyState();
     private com.minecolonies.kingdoms.diplomacy.ReputationRegistry reputation = new com.minecolonies.kingdoms.diplomacy.ReputationRegistry();
     private com.minecolonies.kingdoms.bandit.BanditRegistry bandits = new com.minecolonies.kingdoms.bandit.BanditRegistry();
+    private com.minecolonies.kingdoms.military.MilitaryRegistry military = new com.minecolonies.kingdoms.military.MilitaryRegistry();
 
     public static KingdomsSavedData get(final ServerLevel level)
     {
@@ -101,6 +102,12 @@ public final class KingdomsSavedData extends SavedData
     public com.minecolonies.kingdoms.bandit.BanditRegistry bandits()
     {
         return bandits;
+    }
+
+    /** Garrisons and security (schema 14); written only by {@code MilitaryService}. */
+    public com.minecolonies.kingdoms.military.MilitaryRegistry military()
+    {
+        return military;
     }
 
     /** Player reputation per faction (schema 11); the only store of player standing. */
@@ -214,6 +221,7 @@ public final class KingdomsSavedData extends SavedData
         tag.put("diplomacy", diplomacy.save());
         tag.put("reputation", reputation.save());
         tag.put("bandits", bandits.save());
+        tag.put("military", military.save());
         return tag;
     }
 
@@ -243,6 +251,7 @@ public final class KingdomsSavedData extends SavedData
         data.diplomacy = com.minecolonies.kingdoms.diplomacy.DiplomacyState.load(migrated.getCompound("diplomacy"));
         data.reputation = com.minecolonies.kingdoms.diplomacy.ReputationRegistry.load(migrated.getCompound("reputation"));
         data.bandits = com.minecolonies.kingdoms.bandit.BanditRegistry.load(migrated.getCompound("bandits"));
+        data.military = com.minecolonies.kingdoms.military.MilitaryRegistry.load(migrated.getCompound("military"));
         return data;
     }
 

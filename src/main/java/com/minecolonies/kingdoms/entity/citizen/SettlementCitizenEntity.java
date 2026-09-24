@@ -99,6 +99,10 @@ public final class SettlementCitizenEntity extends PathfinderMob
     @Override
     public boolean shouldBeSaved() { return false; }
 
+    /** Never through portals: that would load chunks in another dimension; the manager owns where it is. */
+    @Override
+    public boolean canUsePortal(final boolean allowPassengers) { return false; }
+
     @Override
     public boolean removeWhenFarAway(final double distance) { return false; }
 

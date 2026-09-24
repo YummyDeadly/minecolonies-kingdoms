@@ -127,6 +127,20 @@ public final class KingdomsConfig
         public final ModConfigSpec.LongValue campsRecruitIntervalTicks;
         public final ModConfigSpec.BooleanValue campsStructures;
         public final ModConfigSpec.LongValue campsMaxInhabitedTicks;
+        public final ModConfigSpec.BooleanValue securityEnabled;
+        public final ModConfigSpec.IntValue securityEvaluationIntervalTicks;
+        public final ModConfigSpec.DoubleValue securityRecruitmentMultiplier;
+        public final ModConfigSpec.IntValue securityPatrolRadius;
+        public final ModConfigSpec.LongValue securitySortieCooldownTicks;
+        public final ModConfigSpec.IntValue securitySortieMinimumStrength;
+        public final ModConfigSpec.BooleanValue guardsEnabled;
+        public final ModConfigSpec.IntValue guardsMaterializationRadius;
+        public final ModConfigSpec.IntValue guardsDematerializationRadius;
+        public final ModConfigSpec.IntValue guardsMaxPerSettlement;
+        public final ModConfigSpec.IntValue guardsMaxGlobal;
+        public final ModConfigSpec.IntValue guardsMaxPerPlayer;
+        public final ModConfigSpec.IntValue guardsResponseRadius;
+        public final ModConfigSpec.IntValue guardsMaxResponders;
         public final ModConfigSpec.IntValue diplomacyEvaluationIntervalTicks;
         public final ModConfigSpec.IntValue growthEvaluationIntervalTicks;
         public final ModConfigSpec.IntValue growthMaxSettlementsPerCycle;
@@ -392,6 +406,35 @@ public final class KingdomsConfig
             campsMaxInhabitedTicks = builder.comment("Camp blocks are placed only in chunks players have spent less than this long in",
                     "(so a player's base is never touched, also in new chunks).")
                 .defineInRange("maxInhabitedTicks", 24_000L, 0L, 72_000_000L);
+            builder.pop();
+            builder.pop();
+
+            builder.push("security");
+            securityEnabled = builder.comment("Settlement garrisons, security, and patrols (Phase 9). Disabling freezes garrisons (no recruitment or patrols) and removes guards.")
+                .define("enabled", true);
+            securityEvaluationIntervalTicks = builder.comment("Ticks between garrison/security evaluations.")
+                .defineInRange("evaluationIntervalTicks", 2_400, 200, 72_000);
+            securityRecruitmentMultiplier = builder.comment("Scales garrison recruitment (1 soldier per day, +1 per completed civic building, at most +2).")
+                .defineInRange("recruitmentMultiplier", 1.0D, 0.0D, 10.0D);
+            securityPatrolRadius = builder.comment("Garrisons send patrols against bandit camps within this distance of the settlement.")
+                .defineInRange("patrolRadius", 640, 0, 4_096);
+            securitySortieCooldownTicks = builder.comment("Minimum time between two patrols of one garrison.")
+                .defineInRange("sortieCooldownTicks", 48_000L, 0L, 7_200_000L);
+            securitySortieMinimumStrength = builder.comment("Soldiers a garrison needs at home to send a patrol.")
+                .defineInRange("sortieMinimumStrength", 4, 1, 1_000);
+            builder.push("guards");
+            guardsEnabled = builder.comment("Physical guards near players (representation only; garrisons stay authoritative).")
+                .define("enabled", true);
+            guardsMaterializationRadius = builder.defineInRange("materializationRadius", 96, 16, 256);
+            guardsDematerializationRadius = builder.comment("At least 16 more than the materialization radius.")
+                .defineInRange("dematerializationRadius", 128, 32, 384);
+            guardsMaxPerSettlement = builder.comment("Patrolling guards per settlement.")
+                .defineInRange("maxPerSettlement", 4, 0, 16);
+            guardsMaxGlobal = builder.defineInRange("maxGlobal", 24, 0, 256);
+            guardsMaxPerPlayer = builder.defineInRange("maxPerPlayer", 12, 0, 64);
+            guardsResponseRadius = builder.comment("A physical bandit fight within this distance of a settlement gets responders from its garrison.")
+                .defineInRange("responseRadius", 320, 0, 1_024);
+            guardsMaxResponders = builder.defineInRange("maxResponders", 3, 0, 8);
             builder.pop();
             builder.pop();
 

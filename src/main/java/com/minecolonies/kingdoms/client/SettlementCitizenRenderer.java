@@ -89,13 +89,13 @@ public final class SettlementCitizenRenderer extends MobRenderer<SettlementCitiz
         return new Appearance(skin.texture(), skin.model() == PlayerSkin.Model.SLIM ? vanillaSlim : vanillaWide);
     }
 
-    private static ResourceLocation citizenTexture(final String key)
+    static ResourceLocation citizenTexture(final String key)
     {
         return ResourceLocation.fromNamespaceAndPath("minecolonies", "textures/entity/citizen/" + key + ".png");
     }
 
     /** Present and in the humanoid layout (read once from the PNG header; resource packs may replace textures). */
-    private static boolean available(final ResourceLocation texture)
+    static boolean available(final ResourceLocation texture)
     {
         return AVAILABLE.computeIfAbsent(texture, SettlementCitizenRenderer::humanoidTexture);
     }

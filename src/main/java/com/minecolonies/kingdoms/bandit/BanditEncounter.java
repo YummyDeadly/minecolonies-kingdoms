@@ -32,9 +32,10 @@ public final class BanditEncounter
 {
     public enum Kind { AMBUSH, ROADBLOCK, CAMP }
 
+    /** RESOLVED_GARRISON (Phase 9): a settlement's guards or patrol beat the bandits without players. */
     public enum Status
     {
-        PLANNED, ACTIVE, RESOLVED_BANDITS, RESOLVED_CARAVAN, RESOLVED_PLAYER, EXPIRED, CANCELLED;
+        PLANNED, ACTIVE, RESOLVED_BANDITS, RESOLVED_CARAVAN, RESOLVED_PLAYER, EXPIRED, CANCELLED, RESOLVED_GARRISON;
 
         public boolean terminal() { return this != PLANNED && this != ACTIVE; }
     }
@@ -42,7 +43,20 @@ public final class BanditEncounter
     public enum Representation { ABSTRACT, PHYSICAL }
 
     /** Why an encounter reached its final status. */
-    public enum Cause { ABSTRACT_ROLL, PLAYER_VICTORY, CARAVAN_GUARDS, CARAVAN_OVERRUN, SHIPMENT_GONE, ROAD_GONE, LIFETIME_OVER, ADMIN }
+    public enum Cause
+    {
+        ABSTRACT_ROLL, PLAYER_VICTORY, CARAVAN_GUARDS, CARAVAN_OVERRUN, SHIPMENT_GONE, ROAD_GONE, LIFETIME_OVER, ADMIN,
+        /** Phase 9: settlement guards finished a physical fight. */
+        GARRISON_DEFENCE,
+        /** Phase 9: a garrison patrol cleared a camp while nobody watched. */
+        GARRISON_PATROL;
+
+        public boolean garrison() { return this == GARRISON_DEFENCE || this == GARRISON_PATROL; }
+    }
+
+    /** At most this many garrisons are tracked per encounter, each with at most {@link #MAX_GARRISON_LOSSES} losses. */
+    static final int MAX_GARRISONS = 4;
+    static final int MAX_GARRISON_LOSSES = 16;
 
     /** Players credited for a fight; a contract holder who fights is always credited on top (see {@link #defender(UUID, boolean)}). */
     public static final int MAX_DEFENDERS = 8;
@@ -76,6 +90,8 @@ public final class BanditEncounter
     private final List<UUID> defenders = new ArrayList<>();
     private boolean consequencesApplied;
     private boolean expiryDeferred;
+    private final java.util.Map<UUID, Integer> garrisonLosses = new java.util.LinkedHashMap<>();
+    private final List<UUID> garrisonDefenders = new ArrayList<>();
 
     public BanditEncounter(final UUID id, final Kind kind, final UUID roadId, final UUID shipmentId, final ResourceLocation dimension,
         final BlockPos position, final double triggerProgress, final double threatAtCreation, final int strength,
@@ -163,6 +179,34 @@ public final class BanditEncounter
     }
 
     public boolean expiryDeferred() { return expiryDeferred; }
+
+    /**
+     * Soldiers of each settlement's garrison who died fighting this encounter (physical responders killed by its bandits,
+     * or a patrol's losses). They are applied to the garrisons once, when the encounter ends.
+     */
+    public java.util.Map<UUID, Integer> garrisonLosses() { return java.util.Map.copyOf(garrisonLosses); }
+
+    /** Settlements whose guards or patrol fought this encounter. */
+    public List<UUID> garrisonDefenders() { return List.copyOf(garrisonDefenders); }
+
+    /** Records losses of one garrison (capped per garrison); returns the losses actually recorded. */
+    int garrisonLoss(final UUID settlementId, final int amount)
+    {
+        requireOpen();
+        if (amount <= 0 || (!garrisonLosses.containsKey(settlementId) && garrisonLosses.size() >= MAX_GARRISONS)) return 0;
+        final int before = garrisonLosses.getOrDefault(settlementId, 0);
+        final int after = Math.min(MAX_GARRISON_LOSSES, before + amount);
+        if (after == before) return 0;
+        garrisonLosses.put(settlementId, after);
+        garrisonDefender(settlementId);
+        return after - before;
+    }
+
+    void garrisonDefender(final UUID settlementId)
+    {
+        requireOpen();
+        if (!garrisonDefenders.contains(settlementId) && garrisonDefenders.size() < MAX_GARRISONS) garrisonDefenders.add(settlementId);
+    }
 
     /** One bandit of this encounter died; returns the remaining strength. */
     int banditLost()
@@ -270,6 +314,21 @@ public final class BanditEncounter
         tag.put("defenders", list);
         tag.putBoolean("consequencesApplied", consequencesApplied);
         tag.putBoolean("expiryDeferred", expiryDeferred);
+        final ListTag losses = new ListTag();
+        garrisonLosses.forEach((settlement, amount) -> {
+            final CompoundTag entry = new CompoundTag();
+            entry.putUUID("settlement", settlement);
+            entry.putInt("losses", amount);
+            losses.add(entry);
+        });
+        tag.put("garrisonLosses", losses);
+        final ListTag garrisons = new ListTag();
+        garrisonDefenders.forEach(settlement -> {
+            final CompoundTag entry = new CompoundTag();
+            entry.putUUID("id", settlement);
+            garrisons.add(entry);
+        });
+        tag.put("garrisonDefenders", garrisons);
         return tag;
     }
 
@@ -299,6 +358,16 @@ public final class BanditEncounter
         });
         encounter.consequencesApplied = tag.getBoolean("consequencesApplied");
         encounter.expiryDeferred = tag.getBoolean("expiryDeferred");
+        tag.getList("garrisonLosses", Tag.TAG_COMPOUND).forEach(value -> {
+            final CompoundTag entry = (CompoundTag) value;
+            if (entry.hasUUID("settlement") && encounter.garrisonLosses.size() < MAX_GARRISONS)
+                encounter.garrisonLosses.put(entry.getUUID("settlement"), Math.max(0, Math.min(MAX_GARRISON_LOSSES, entry.getInt("losses"))));
+        });
+        tag.getList("garrisonDefenders", Tag.TAG_COMPOUND).forEach(value -> {
+            final CompoundTag entry = (CompoundTag) value;
+            if (entry.hasUUID("id") && encounter.garrisonDefenders.size() < MAX_GARRISONS && !encounter.garrisonDefenders.contains(entry.getUUID("id")))
+                encounter.garrisonDefenders.add(entry.getUUID("id"));
+        });
         if (encounter.status.terminal() && encounter.cause == null)
             throw new IllegalArgumentException("Resolved encounter " + encounter.id + " without cause");
         return encounter;

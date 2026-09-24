@@ -105,6 +105,7 @@ public final class BanditEntity extends Monster
         targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, CaravanMemberEntity.class, 10, true, false,
             member -> shipmentId != null && member instanceof CaravanMemberEntity caravan && shipmentId.equals(caravan.shipmentId())));
         targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Player.class, true));
+        targetSelector.addGoal(4, new NearestAttackableTargetGoal<>(this, com.minecolonies.kingdoms.entity.guard.SettlementGuardEntity.class, true));
     }
 
     public void discardByManager()
@@ -140,7 +141,8 @@ public final class BanditEntity extends Monster
         super.die(source);
         if (wasDead || !dead) return; // a cancelled death (LivingDeathEvent) or a repeated call reports nothing
         if (!managerDiscard && !level().isClientSide)
-            BanditManager.getInstance().onBanditDeath(this, source.getEntity() instanceof ServerPlayer player ? player : null);
+            BanditManager.getInstance().onBanditDeath(this, source.getEntity() instanceof ServerPlayer player ? player : null,
+                source.getEntity() instanceof com.minecolonies.kingdoms.entity.guard.SettlementGuardEntity guard ? guard.settlementId() : null);
     }
 
     /** Nothing but the vanilla experience: no custom loot, equipment never drops (see {@link #configure}). */
@@ -149,6 +151,10 @@ public final class BanditEntity extends Monster
 
     @Override
     public boolean shouldBeSaved() { return false; }
+
+    /** Never through portals: that would load chunks in another dimension; the manager owns where it is. */
+    @Override
+    public boolean canUsePortal(final boolean allowPassengers) { return false; }
 
     @Override
     public boolean removeWhenFarAway(final double distance) { return false; }

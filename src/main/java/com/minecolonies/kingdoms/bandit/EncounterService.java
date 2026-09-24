@@ -172,6 +172,47 @@ public final class EncounterService
         data.markChanged();
     }
 
+    /**
+     * A settlement's responder was killed by this encounter's bandits (Phase 9): recorded on the encounter and applied to
+     * the garrison once, when the encounter ends. Returns whether it was recorded.
+     */
+    public static boolean recordGarrisonLoss(final KingdomsSavedData data, final BanditEncounter encounter, final UUID settlementId)
+    {
+        if (!encounter.open() || encounter.garrisonLoss(settlementId, 1) <= 0) return false;
+        data.markChanged();
+        return true;
+    }
+
+    /** A settlement's guards fought this encounter (a guard killed one of its bandits). */
+    public static void recordGarrisonDefender(final KingdomsSavedData data, final BanditEncounter encounter, final UUID settlementId)
+    {
+        if (!encounter.open()) return;
+        encounter.garrisonDefender(settlementId);
+        data.markChanged();
+    }
+
+    /**
+     * A garrison patrol fought this encounter and lost {@code losses} soldiers (applied when the encounter ends). Returns
+     * the losses actually recorded (bounded per garrison and encounter).
+     */
+    public static int recordGarrisonDefence(final KingdomsSavedData data, final BanditEncounter encounter, final UUID settlementId,
+        final int losses)
+    {
+        if (!encounter.open()) return 0;
+        encounter.garrisonDefender(settlementId);
+        final int recorded = losses > 0 ? encounter.garrisonLoss(settlementId, losses) : 0;
+        data.markChanged();
+        return recorded;
+    }
+
+    /** Who won a fight that ended with every bandit down: players, else a garrison, else the caravan guards. */
+    public static BanditEncounter.Cause victoryCause(final BanditEncounter encounter)
+    {
+        if (!encounter.defenders().isEmpty()) return BanditEncounter.Cause.PLAYER_VICTORY;
+        if (!encounter.garrisonDefenders().isEmpty()) return BanditEncounter.Cause.GARRISON_DEFENCE;
+        return BanditEncounter.Cause.CARAVAN_GUARDS;
+    }
+
     /** A camp recruited while unobserved (see {@link CampService#recruit}). */
     static int reinforce(final KingdomsSavedData data, final BanditEncounter encounter, final int amount)
     {
@@ -298,8 +339,8 @@ public final class EncounterService
         final BanditEncounter.Status status = switch (outcome)
         {
             case PARTIAL_LOSS, TOTAL_LOSS -> BanditEncounter.Status.RESOLVED_BANDITS;
-            case BANDITS_DEFEATED -> cause == BanditEncounter.Cause.PLAYER_VICTORY
-                ? BanditEncounter.Status.RESOLVED_PLAYER : BanditEncounter.Status.RESOLVED_CARAVAN;
+            case BANDITS_DEFEATED -> cause == BanditEncounter.Cause.PLAYER_VICTORY ? BanditEncounter.Status.RESOLVED_PLAYER
+                : cause.garrison() ? BanditEncounter.Status.RESOLVED_GARRISON : BanditEncounter.Status.RESOLVED_CARAVAN;
             case CARAVAN_ESCAPED, CARAVAN_DELAYED -> BanditEncounter.Status.RESOLVED_CARAVAN;
         };
         encounter.resolve(status, cause, outcome, gameTime);
@@ -323,6 +364,7 @@ public final class EncounterService
         final List<ContractService.Closure> closures = ContractService.onEncounterResolved(data, encounter.id(), false, false, missed,
             List.of(), gameTime, contractSettings);
         CampService.onEncounterResolved(data, encounter, gameTime, settings);
+        com.minecolonies.kingdoms.military.MilitaryService.onEncounterEnded(data, encounter, gameTime);
         encounter.markConsequencesApplied();
         data.markChanged();
         return new Resolution(true, encounter, 0L, closures, java.util.Map.of());
@@ -343,7 +385,7 @@ public final class EncounterService
                 continue;
             if (encounter.remainingStrength() <= 0)
                 resolutions.add(resolve(data, encounter, new EncounterRules.Decision(EncounterRules.Outcome.BANDITS_DEFEATED, 0.0D, 0L),
-                    encounter.defenders().isEmpty() ? BanditEncounter.Cause.CARAVAN_GUARDS : BanditEncounter.Cause.PLAYER_VICTORY,
+                    victoryCause(encounter),
                     List.of(), gameTime, settings, contractSettings));
             else if (encounter.kind() == BanditEncounter.Kind.AMBUSH && gameTime >= encounter.resolveAt())
                 resolutions.add(resolve(data, encounter, EncounterRules.decideAbstract(encounter.seed(), encounter.remainingStrength(),
@@ -368,6 +410,7 @@ public final class EncounterService
         final List<ContractService.Closure> closures = ContractService.onEncounterResolved(data, encounter.id(), playersWon, banditsWon,
             false, encounter.defenders(), gameTime, contractSettings);
         CampService.onEncounterResolved(data, encounter, gameTime, settings);
+        com.minecolonies.kingdoms.military.MilitaryService.onEncounterEnded(data, encounter, gameTime);
         final java.util.Map<UUID, ReputationService.Result> reputation = new java.util.LinkedHashMap<>();
         if (playersWon)
         {
@@ -405,12 +448,12 @@ public final class EncounterService
             .min(Comparator.comparingDouble(settlement -> settlement.anchor().distSqr(position)));
     }
 
-    /** Security of the road: the stronger of its two settlements. */
+    /** Security of the road: the stronger of its two settlements (their garrisons' security level, Phase 9). */
     public static int security(final KingdomsSavedData data, final BanditEncounter encounter)
     {
         return data.roads().get(encounter.roadId()).map(road -> Math.max(
-            data.settlements().get(road.firstSettlementId()).map(value -> ThreatRules.security(value.type())).orElse(0),
-            data.settlements().get(road.secondSettlementId()).map(value -> ThreatRules.security(value.type())).orElse(0))).orElse(0);
+            com.minecolonies.kingdoms.military.MilitaryService.level(data, road.firstSettlementId()),
+            com.minecolonies.kingdoms.military.MilitaryService.level(data, road.secondSettlementId()))).orElse(0);
     }
 
     /** Where a shipment is: physical caravans report their own progress; abstract ones follow time. */
