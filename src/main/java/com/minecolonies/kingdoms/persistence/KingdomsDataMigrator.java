@@ -39,6 +39,7 @@ public final class KingdomsDataMigrator
                 case 9 -> migrateV9ToV10(migrated);
                 case 10 -> migrateV10ToV11(migrated);
                 case 11 -> migrateV11ToV12(migrated);
+                case 12 -> migrateV12ToV13(migrated);
                 default -> throw new IllegalStateException("No migration path from schema " + version);
             };
         }
@@ -384,6 +385,18 @@ public final class KingdomsDataMigrator
     {
         if (!root.contains("bandits", Tag.TAG_COMPOUND)) root.put("bandits", new CompoundTag());
         return 12;
+    }
+
+    /**
+     * Phase 8.1 bandit camps: an empty camp list. Road threat records gain camp pressure, cooldown, and a camp
+     * contributor, which read as zero/none when absent; nothing else changes.
+     */
+    private static int migrateV12ToV13(final CompoundTag root)
+    {
+        if (!root.contains("bandits", Tag.TAG_COMPOUND)) root.put("bandits", new CompoundTag());
+        final CompoundTag bandits = root.getCompound("bandits");
+        if (!bandits.contains("camps", Tag.TAG_LIST)) bandits.put("camps", new ListTag());
+        return 13;
     }
 
     private static int migrateV7ToV8(final CompoundTag root)

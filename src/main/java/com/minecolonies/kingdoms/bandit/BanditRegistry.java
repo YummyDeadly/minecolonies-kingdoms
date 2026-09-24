@@ -17,15 +17,20 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Persisted bandit state (schema 12): per-road threat, encounters, and one assessment decision per in-transit
- * shipment (so a shipment is judged once and a restart cannot re-roll it). Physical entities are never persisted.
+ * Persisted bandit state (schema 12, camps since schema 13): per-road threat, encounters, one assessment decision per
+ * in-transit shipment (so a shipment is judged once and a restart cannot re-roll it), and bandit camps. Physical
+ * entities are never persisted.
  */
 public final class BanditRegistry
 {
     private final Map<UUID, RoadThreat> threats = new LinkedHashMap<>();
     private final Map<UUID, BanditEncounter> encounters = new LinkedHashMap<>();
     private final Map<UUID, Long> assessed = new LinkedHashMap<>();
+    private final Map<UUID, BanditCamp> camps = new LinkedHashMap<>();
     private long lastEvaluatedAt = -1L;
+
+    /** Ended camps kept for diagnostics (those with placed blocks are always kept until the blocks are removed). */
+    public static final int MAX_ENDED_CAMPS = 64;
 
     public long lastEvaluatedAt() { return lastEvaluatedAt; }
     void setLastEvaluatedAt(final long gameTime) { lastEvaluatedAt = gameTime; }
@@ -61,6 +66,19 @@ public final class BanditRegistry
             && value.roadId().equals(roadId));
     }
 
+    public Collection<BanditCamp> camps() { return Collections.unmodifiableCollection(camps.values()); }
+    public Optional<BanditCamp> camp(final UUID id) { return Optional.ofNullable(camps.get(id)); }
+    void put(final BanditCamp camp) { camps.put(camp.id(), camp); }
+    public List<BanditCamp> activeCamps() { return camps.values().stream().filter(BanditCamp::active).toList(); }
+    public Optional<BanditCamp> activeCampOn(final UUID roadId)
+    {
+        return camps.values().stream().filter(value -> value.active() && value.roadId().equals(roadId)).findFirst();
+    }
+    public Optional<BanditCamp> campByEncounter(final UUID encounterId)
+    {
+        return camps.values().stream().filter(value -> value.encounterId().equals(encounterId)).findFirst();
+    }
+
     public boolean assessed(final UUID shipmentId) { return assessed.containsKey(shipmentId); }
     void markAssessed(final UUID shipmentId, final long gameTime) { assessed.putIfAbsent(shipmentId, gameTime); }
     public int assessments() { return assessed.size(); }
@@ -71,7 +89,7 @@ public final class BanditRegistry
      */
     public int prune(final Set<UUID> inTransit, final Set<UUID> roads, final long gameTime, final long retention, final int maxHistory)
     {
-        final int before = encounters.size() + assessed.size() + threats.size();
+        final int before = encounters.size() + assessed.size() + threats.size() + camps.size();
         assessed.keySet().retainAll(inTransit);
         threats.keySet().retainAll(roads);
         encounters.values().removeIf(value -> value.status().terminal() && gameTime - value.resolvedAt() > retention);
@@ -81,7 +99,20 @@ public final class BanditRegistry
             closed.sort(Comparator.comparingLong(BanditEncounter::resolvedAt));
             closed.subList(0, closed.size() - maxHistory).forEach(value -> encounters.remove(value.id()));
         }
-        return before - (encounters.size() + assessed.size() + threats.size());
+        // an ended camp stays while its blocks are in the world (so they can be taken down) and while its encounter is kept
+        final List<BanditCamp> ended = new ArrayList<>(camps.values().stream()
+            .filter(value -> !value.active() && value.structure() != BanditCamp.Structure.BUILT && !encounters.containsKey(value.encounterId()))
+            .toList());
+        ended.forEach(value -> camps.remove(value.id()));
+        // bounded history: beyond the cap the oldest ended camps are forgotten; blocks of one that was never taken down
+        // (nobody came near again) simply stay as a harmless abandoned camp
+        final List<BanditCamp> kept = new ArrayList<>(camps.values().stream().filter(value -> !value.active()).toList());
+        if (kept.size() > MAX_ENDED_CAMPS)
+        {
+            kept.sort(Comparator.comparingLong(BanditCamp::endedAt));
+            kept.subList(0, kept.size() - MAX_ENDED_CAMPS).forEach(value -> camps.remove(value.id()));
+        }
+        return before - (encounters.size() + assessed.size() + threats.size() + camps.size());
     }
 
     public CompoundTag save()
@@ -101,6 +132,9 @@ public final class BanditRegistry
             assessedList.add(entry);
         });
         tag.put("assessed", assessedList);
+        final ListTag campList = new ListTag();
+        camps.values().forEach(value -> campList.add(value.save()));
+        tag.put("camps", campList);
         tag.putLong("lastEvaluatedAt", lastEvaluatedAt);
         return tag;
     }
@@ -126,6 +160,17 @@ public final class BanditRegistry
         tag.getList("assessed", Tag.TAG_COMPOUND).forEach(value -> {
             final CompoundTag entry = (CompoundTag) value;
             if (entry.hasUUID("shipment")) registry.assessed.put(entry.getUUID("shipment"), entry.getLong("time"));
+        });
+        tag.getList("camps", Tag.TAG_COMPOUND).forEach(value -> {
+            try
+            {
+                final BanditCamp camp = BanditCamp.load((CompoundTag) value);
+                registry.camps.put(camp.id(), camp);
+            }
+            catch (RuntimeException exception)
+            {
+                KingdomsMod.LOGGER.error("Dropping unreadable bandit camp {}", value, exception);
+            }
         });
         registry.lastEvaluatedAt = tag.contains("lastEvaluatedAt") ? tag.getLong("lastEvaluatedAt") : -1L;
         return registry;

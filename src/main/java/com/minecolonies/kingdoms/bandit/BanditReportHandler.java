@@ -36,9 +36,11 @@ public final class BanditReportHandler implements CitizenInteractionHandler
         final StringBuilder line = new StringBuilder(String.format(Locale.ROOT, "\"The road to %s is dangerous (threat %.0f).",
             other, data.bandits().threatOf(worst.id())));
         data.bandits().open().stream().filter(encounter -> encounter.roadId().equals(worst.id())
-                && encounter.status() == BanditEncounter.Status.ACTIVE).findFirst()
+                && encounter.status() == BanditEncounter.Status.ACTIVE && encounter.kind() != BanditEncounter.Kind.CAMP).findFirst()
             .ifPresent(encounter -> line.append(" Bandits were seen near ").append(encounter.position().getX()).append(", ")
                 .append(encounter.position().getZ()).append('.'));
+        data.bandits().activeCampOn(worst.id()).ifPresent(camp -> line.append(" They have a camp beside the road near ")
+            .append(camp.position().getX()).append(", ").append(camp.position().getZ()).append('.'));
         line.append('"');
         return Optional.of(Component.literal(line.toString()).withStyle(ChatFormatting.GOLD));
     }

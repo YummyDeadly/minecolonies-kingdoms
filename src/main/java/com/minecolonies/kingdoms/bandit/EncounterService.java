@@ -147,6 +147,46 @@ public final class EncounterService
         return Optional.of(encounter);
     }
 
+    /** Opens the fight of a new bandit camp (Phase 8.1); {@link CampService} creates the camp record around it. */
+    static BanditEncounter openCampEncounter(final KingdomsSavedData data, final UUID id, final RoadRecord road, final BlockPos position,
+        final double threat, final int strength, final long gameTime, final long expiresAt)
+    {
+        if (data.bandits().encounter(id).isPresent()) throw new IllegalStateException("Camp encounter " + id + " already exists");
+        final BanditEncounter encounter = new BanditEncounter(id, BanditEncounter.Kind.CAMP, road.id(), null, road.dimension(), position,
+            0.0D, threat, strength, gameTime, expiresAt);
+        data.bandits().put(encounter);
+        data.markChanged();
+        return encounter;
+    }
+
+    /**
+     * A player fought this encounter (hit or killed one of its bandits). The holder of an accepted contract for it is
+     * always credited, beyond the helper cap.
+     */
+    public static void recordDefender(final KingdomsSavedData data, final BanditEncounter encounter, final UUID player)
+    {
+        if (!encounter.open()) return;
+        final boolean holder = data.contracts().targeting(encounter.id()).stream()
+            .anyMatch(contract -> contract.status() == com.minecolonies.kingdoms.contract.ContractStatus.ACCEPTED && player.equals(contract.holder()));
+        encounter.defender(player, holder);
+        data.markChanged();
+    }
+
+    /** A camp recruited while unobserved (see {@link CampService#recruit}). */
+    static int reinforce(final KingdomsSavedData data, final BanditEncounter encounter, final int amount)
+    {
+        final int remaining = encounter.reinforce(amount);
+        data.markChanged();
+        return remaining;
+    }
+
+    /** A camp moved to another of its candidate sites before anything was placed (see {@link CampService#useSite}). */
+    static void relocate(final KingdomsSavedData data, final BanditEncounter encounter, final BlockPos position)
+    {
+        encounter.relocate(position);
+        data.markChanged();
+    }
+
     // ------------------------------------------------------------------------------------------------ activation
 
     /**
@@ -163,7 +203,7 @@ public final class EncounterService
             final TradeShipment shipment = data.tradeLedger().shipment(encounter.shipmentId()).orElse(null);
             if (shipment == null || shipment.status() != TradeShipmentStatus.IN_TRANSIT)
             {
-                cancel(data, encounter, BanditEncounter.Cause.SHIPMENT_GONE, gameTime, contracts);
+                cancel(data, encounter, BanditEncounter.Cause.SHIPMENT_GONE, gameTime, settings, contracts);
                 continue;
             }
             if (progress(shipment, gameTime) + 1.0E-6D < encounter.triggerProgress()) continue;
@@ -182,15 +222,21 @@ public final class EncounterService
      */
     public static List<Resolution> cancelStale(final KingdomsSavedData data, final long gameTime, final ContractSettings contracts)
     {
+        return cancelStale(data, gameTime, BanditSettings.defaults(), contracts);
+    }
+
+    public static List<Resolution> cancelStale(final KingdomsSavedData data, final long gameTime, final BanditSettings settings,
+        final ContractSettings contracts)
+    {
         final List<Resolution> cancelled = new ArrayList<>();
         for (final BanditEncounter encounter : data.bandits().open())
         {
             if (encounter.kind() != BanditEncounter.Kind.AMBUSH) continue;
             final boolean gone = data.tradeLedger().shipment(encounter.shipmentId())
                 .map(shipment -> shipment.status() != TradeShipmentStatus.IN_TRANSIT).orElse(true);
-            if (gone) cancelled.add(cancel(data, encounter, BanditEncounter.Cause.SHIPMENT_GONE, gameTime, contracts));
+            if (gone) cancelled.add(cancel(data, encounter, BanditEncounter.Cause.SHIPMENT_GONE, gameTime, settings, contracts));
             else if (encounter.status() == BanditEncounter.Status.PLANNED && gameTime >= encounter.expiresAt())
-                cancelled.add(cancel(data, encounter, BanditEncounter.Cause.LIFETIME_OVER, gameTime, contracts));
+                cancelled.add(cancel(data, encounter, BanditEncounter.Cause.LIFETIME_OVER, gameTime, settings, contracts));
         }
         return cancelled;
     }
@@ -233,7 +279,7 @@ public final class EncounterService
             final TradeShipment shipment = data.tradeLedger().shipment(encounter.shipmentId()).orElse(null);
             if (shipment == null || shipment.status() != TradeShipmentStatus.IN_TRANSIT)
             {
-                return cancel(data, encounter, BanditEncounter.Cause.SHIPMENT_GONE, gameTime, contractSettings);
+                return cancel(data, encounter, BanditEncounter.Cause.SHIPMENT_GONE, gameTime, settings, contractSettings);
             }
             final long before = shipment.deliverableAmount();
             final long wanted = EncounterRules.lostUnits(before, decision.lossFraction());
@@ -263,7 +309,7 @@ public final class EncounterService
 
     /** Ends an encounter without a fight (shipment or road gone, lifetime over, operator). */
     public static Resolution cancel(final KingdomsSavedData data, final BanditEncounter encounter, final BanditEncounter.Cause cause,
-        final long gameTime, final ContractSettings contractSettings)
+        final long gameTime, final BanditSettings settings, final ContractSettings contractSettings)
     {
         if (!encounter.open()) return Resolution.notApplied(encounter);
         if (encounter.kind() == BanditEncounter.Kind.AMBUSH && encounter.status() == BanditEncounter.Status.ACTIVE)
@@ -272,10 +318,11 @@ public final class EncounterService
                 .ifPresent(shipment -> shipment.releaseHold(gameTime));
         encounter.resolve(cause == BanditEncounter.Cause.LIFETIME_OVER ? BanditEncounter.Status.EXPIRED : BanditEncounter.Status.CANCELLED,
             cause, null, gameTime);
-        // a roadblock that outlived its lifetime was not cleared: an accepted clear-the-road contract has failed
-        final boolean missed = cause == BanditEncounter.Cause.LIFETIME_OVER && encounter.kind() == BanditEncounter.Kind.ROADBLOCK;
+        // a roadblock or camp that outlived its lifetime was not cleared: an accepted clear contract has failed
+        final boolean missed = cause == BanditEncounter.Cause.LIFETIME_OVER && encounter.kind() != BanditEncounter.Kind.AMBUSH;
         final List<ContractService.Closure> closures = ContractService.onEncounterResolved(data, encounter.id(), false, false, missed,
             List.of(), gameTime, contractSettings);
+        CampService.onEncounterResolved(data, encounter, gameTime, settings);
         encounter.markConsequencesApplied();
         data.markChanged();
         return new Resolution(true, encounter, 0L, closures, java.util.Map.of());
@@ -301,8 +348,8 @@ public final class EncounterService
             else if (encounter.kind() == BanditEncounter.Kind.AMBUSH && gameTime >= encounter.resolveAt())
                 resolutions.add(resolve(data, encounter, EncounterRules.decideAbstract(encounter.seed(), encounter.remainingStrength(),
                     security(data, encounter)), BanditEncounter.Cause.ABSTRACT_ROLL, List.of(), gameTime, settings, contractSettings));
-            else if (encounter.kind() == BanditEncounter.Kind.ROADBLOCK && gameTime >= encounter.expiresAt())
-                resolutions.add(cancel(data, encounter, BanditEncounter.Cause.LIFETIME_OVER, gameTime, contractSettings));
+            else if (encounter.kind() != BanditEncounter.Kind.AMBUSH && gameTime >= encounter.expiresAt())
+                resolutions.add(cancel(data, encounter, BanditEncounter.Cause.LIFETIME_OVER, gameTime, settings, contractSettings));
         }
         return resolutions;
     }
@@ -320,6 +367,7 @@ public final class EncounterService
         final boolean playersWon = encounter.status() == BanditEncounter.Status.RESOLVED_PLAYER;
         final List<ContractService.Closure> closures = ContractService.onEncounterResolved(data, encounter.id(), playersWon, banditsWon,
             false, encounter.defenders(), gameTime, contractSettings);
+        CampService.onEncounterResolved(data, encounter, gameTime, settings);
         final java.util.Map<UUID, ReputationService.Result> reputation = new java.util.LinkedHashMap<>();
         if (playersWon)
         {
@@ -336,7 +384,7 @@ public final class EncounterService
         return new Resolution(true, encounter, lost, closures, java.util.Map.copyOf(reputation));
     }
 
-    /** Whose reputation a defence improves: the caravan owner, or for a roadblock the nearest road endpoint. */
+    /** Whose reputation a defence improves: the caravan owner, or for a roadblock or camp the nearest road endpoint. */
     public static UUID beneficiaryFaction(final KingdomsSavedData data, final BanditEncounter encounter)
     {
         if (encounter.kind() == BanditEncounter.Kind.AMBUSH)

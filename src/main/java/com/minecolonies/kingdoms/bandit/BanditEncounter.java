@@ -17,9 +17,12 @@ import java.util.UUID;
  *
  * <pre>
  * PLANNED --shipment reaches the ambush point--> ACTIVE --resolution--> RESOLVED_BANDITS | RESOLVED_CARAVAN | RESOLVED_PLAYER
- *    |                                             |--roadblock lifetime over--> EXPIRED
- *    +--shipment gone / operator--> CANCELLED <-----+--shipment gone / operator
+ *    |                                             |--roadblock/camp lifetime over--> EXPIRED
+ *    +--shipment gone / operator--> CANCELLED <-----+--shipment gone / road gone / operator
  * </pre>
+ *
+ * Kinds: an AMBUSH waits for one caravan; a ROADBLOCK lurks on a very dangerous road; a CAMP is the fight of one
+ * {@link BanditCamp} (Phase 8.1). ROADBLOCK and CAMP encounters are ACTIVE from creation.
  *
  * Representation (ABSTRACT or PHYSICAL) is separate from the status, like for shipments. Terminal statuses never
  * change, and every resolution goes through {@link EncounterService}, which checks the status first; there is no
@@ -27,7 +30,7 @@ import java.util.UUID;
  */
 public final class BanditEncounter
 {
-    public enum Kind { AMBUSH, ROADBLOCK }
+    public enum Kind { AMBUSH, ROADBLOCK, CAMP }
 
     public enum Status
     {
@@ -41,14 +44,17 @@ public final class BanditEncounter
     /** Why an encounter reached its final status. */
     public enum Cause { ABSTRACT_ROLL, PLAYER_VICTORY, CARAVAN_GUARDS, CARAVAN_OVERRUN, SHIPMENT_GONE, ROAD_GONE, LIFETIME_OVER, ADMIN }
 
+    /** Players credited for a fight; a contract holder who fights is always credited on top (see {@link #defender(UUID, boolean)}). */
     public static final int MAX_DEFENDERS = 8;
+    /** Hard bound of the defender list: the capped helpers plus the (at most one) contract holder, with room to spare. */
+    static final int MAX_DEFENDERS_WITH_HOLDER = MAX_DEFENDERS + 2;
 
     private final UUID id;
     private final Kind kind;
     private final UUID roadId;
     private final UUID shipmentId;
     private final ResourceLocation dimension;
-    private final BlockPos position;
+    private BlockPos position;
     private final double triggerProgress;
     private final long seed;
     private final double threatAtCreation;
@@ -69,6 +75,7 @@ public final class BanditEncounter
     private long delayTicks;
     private final List<UUID> defenders = new ArrayList<>();
     private boolean consequencesApplied;
+    private boolean expiryDeferred;
 
     public BanditEncounter(final UUID id, final Kind kind, final UUID roadId, final UUID shipmentId, final ResourceLocation dimension,
         final BlockPos position, final double triggerProgress, final double threatAtCreation, final int strength,
@@ -90,7 +97,7 @@ public final class BanditEncounter
         this.createdAt = createdAt;
         this.expiresAt = expiresAt;
         this.status = kind == Kind.AMBUSH ? Status.PLANNED : Status.ACTIVE;
-        if (kind == Kind.ROADBLOCK) activatedAt = createdAt;
+        if (kind != Kind.AMBUSH) activatedAt = createdAt;
     }
 
     public UUID id() { return id; }
@@ -143,6 +150,20 @@ public final class BanditEncounter
         if (status == Status.ACTIVE && kind == Kind.AMBUSH) resolveAt = Math.max(resolveAt, gameTime + grace);
     }
 
+    /**
+     * A roadblock or camp whose lifetime ran out during a real fight: when the players step away, it lasts {@code grace}
+     * more ticks instead of expiring on the spot (so its contract holder is not failed mid-fight). Once per encounter.
+     */
+    boolean deferExpiry(final long gameTime, final long grace)
+    {
+        if (kind == Kind.AMBUSH || status != Status.ACTIVE || expiryDeferred || defenders.isEmpty() || expiresAt >= gameTime + grace) return false;
+        expiresAt = gameTime + grace;
+        expiryDeferred = true;
+        return true;
+    }
+
+    public boolean expiryDeferred() { return expiryDeferred; }
+
     /** One bandit of this encounter died; returns the remaining strength. */
     int banditLost()
     {
@@ -151,10 +172,39 @@ public final class BanditEncounter
         return remainingStrength;
     }
 
+    /** A camp recruited new bandits while unobserved: remaining strength grows by {@code amount}, never above the strength. */
+    int reinforce(final int amount)
+    {
+        requireOpen();
+        if (kind != Kind.CAMP) throw new IllegalStateException("Only camps recruit");
+        if (representation != Representation.ABSTRACT) throw new IllegalStateException("A physical camp does not recruit");
+        remainingStrength = Math.min(strength, remainingStrength + Math.max(0, amount));
+        return remainingStrength;
+    }
+
+    /** A camp settled on another of its candidate sites before anything was placed (never while physical). */
+    void relocate(final BlockPos value)
+    {
+        requireOpen();
+        if (kind != Kind.CAMP) throw new IllegalStateException("Only camps relocate");
+        if (representation != Representation.ABSTRACT) throw new IllegalStateException("A physical camp cannot move");
+        position = Objects.requireNonNull(value, "position").immutable();
+    }
+
     void defender(final UUID player)
     {
+        defender(player, false);
+    }
+
+    /**
+     * Credits a player who fought. Helpers are capped at {@link #MAX_DEFENDERS}; the holder of an accepted contract for
+     * this encounter ({@code holder}) is always credited, so a crowd of helpers can never lock them out of their reward.
+     */
+    void defender(final UUID player, final boolean holder)
+    {
         if (status.terminal() && consequencesApplied) return; // a settled encounter never changes
-        if (!defenders.contains(player) && defenders.size() < MAX_DEFENDERS) defenders.add(player);
+        if (defenders.contains(player)) return;
+        if (defenders.size() < MAX_DEFENDERS || (holder && defenders.size() < MAX_DEFENDERS_WITH_HOLDER)) defenders.add(player);
     }
 
     void resolve(final Status terminal, final Cause resolutionCause, final EncounterRules.Outcome result, final long gameTime)
@@ -219,6 +269,7 @@ public final class BanditEncounter
         });
         tag.put("defenders", list);
         tag.putBoolean("consequencesApplied", consequencesApplied);
+        tag.putBoolean("expiryDeferred", expiryDeferred);
         return tag;
     }
 
@@ -243,9 +294,11 @@ public final class BanditEncounter
         encounter.delayTicks = tag.getLong("delay");
         tag.getList("defenders", Tag.TAG_COMPOUND).forEach(value -> {
             final CompoundTag entry = (CompoundTag) value;
-            if (entry.hasUUID("id")) encounter.defender(entry.getUUID("id"));
+            if (entry.hasUUID("id") && encounter.defenders.size() < MAX_DEFENDERS_WITH_HOLDER && !encounter.defenders.contains(entry.getUUID("id")))
+                encounter.defenders.add(entry.getUUID("id"));
         });
         encounter.consequencesApplied = tag.getBoolean("consequencesApplied");
+        encounter.expiryDeferred = tag.getBoolean("expiryDeferred");
         if (encounter.status.terminal() && encounter.cause == null)
             throw new IllegalArgumentException("Resolved encounter " + encounter.id + " without cause");
         return encounter;

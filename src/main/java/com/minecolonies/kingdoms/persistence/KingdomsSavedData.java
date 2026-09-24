@@ -27,7 +27,7 @@ import java.util.UUID;
 public final class KingdomsSavedData extends SavedData
 {
     public static final String DATA_NAME = "minecolonies_kingdoms";
-    public static final int DATA_VERSION = 12;
+    public static final int DATA_VERSION = 13;
     public static final SavedData.Factory<KingdomsSavedData> FACTORY =
         new SavedData.Factory<>(KingdomsSavedData::new, KingdomsSavedData::load);
 
@@ -97,7 +97,7 @@ public final class KingdomsSavedData extends SavedData
         return citizens;
     }
 
-    /** Road threat, bandit encounters, and shipment assessments (schema 12). */
+    /** Road threat, bandit encounters, shipment assessments (schema 12), and bandit camps (schema 13). */
     public com.minecolonies.kingdoms.bandit.BanditRegistry bandits()
     {
         return bandits;

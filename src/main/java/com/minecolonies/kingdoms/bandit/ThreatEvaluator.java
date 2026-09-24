@@ -16,15 +16,15 @@ import java.util.function.ToDoubleFunction;
 
 /**
  * One periodic threat evaluation: every eligible road (physical, routable) steps its threat towards the transparent
- * target; very dangerous roads get a roadblock; encounters of vanished roads are cancelled; bookkeeping is pruned.
- * Cost: linear in roads plus open encounters; no block access.
+ * target; very dangerous roads get a roadblock; roads that stay dangerous get a bandit camp (Phase 8.1); encounters of
+ * vanished roads are cancelled; bookkeeping is pruned. Cost: linear in roads plus open encounters; no block access.
  */
 public final class ThreatEvaluator
 {
     private ThreatEvaluator() {}
 
     /** {@code cancellations}: encounters ended because their road can no longer be used (for notifications). */
-    public record Report(int roads, int roadblocks, int cancelled, List<EncounterService.Resolution> cancellations) {}
+    public record Report(int roads, int roadblocks, int camps, int cancelled, List<EncounterService.Resolution> cancellations) {}
 
     public static boolean eligible(final RoadRecord road)
     {
@@ -35,9 +35,11 @@ public final class ThreatEvaluator
         final List<Vec3> settlementAnchors, final long gameTime, final BanditSettings settings, final ContractSettings contractSettings)
     {
         final BanditRegistry registry = data.bandits();
+        CampService.reconcile(data, gameTime, settings, contractSettings);
         final Set<java.util.UUID> roads = new HashSet<>();
         int evaluated = 0;
         int roadblocks = 0;
+        int camps = 0;
         for (final RoadRecord road : data.roads().roads())
         {
             if (!eligible(road)) continue;
@@ -46,17 +48,19 @@ public final class ThreatEvaluator
             final int security = data.settlements().get(road.firstSettlementId()).map(value -> ThreatRules.security(value.type())).orElse(0)
                 + data.settlements().get(road.secondSettlementId()).map(value -> ThreatRules.security(value.type())).orElse(0);
             threat.evaluate(ThreatRules.contributors(settings.baseThreat(), threat.recentTraffic(), remoteLength.applyAsDouble(road),
-                threat.raidMomentum(), security, threat.suppressedAt(gameTime)), settings.threatStep(), gameTime);
+                threat.raidMomentum(), CampService.contribution(data, road.id(), settings), security, threat.suppressedAt(gameTime)),
+                settings.threatStep(), gameTime);
             evaluated++;
             if (threat.threat() >= settings.roadblockThreshold()
                 && EncounterService.createRoadblock(data, road, settlementAnchors, gameTime, settings).isPresent()) roadblocks++;
+            if (CampService.observe(data, road, threat, settlementAnchors, gameTime, settings).isPresent()) camps++;
         }
         final List<EncounterService.Resolution> cancellations = new ArrayList<>();
         for (final BanditEncounter encounter : new ArrayList<>(registry.open()))
         {
             if (roads.contains(encounter.roadId())) continue;
             final EncounterService.Resolution resolution = EncounterService.cancel(data, encounter, BanditEncounter.Cause.ROAD_GONE, gameTime,
-                contractSettings);
+                settings, contractSettings);
             if (resolution.applied()) cancellations.add(resolution);
         }
         final Set<java.util.UUID> inTransit = new HashSet<>();
@@ -65,6 +69,6 @@ public final class ThreatEvaluator
         registry.prune(inTransit, roads, gameTime, EncounterService.RESOLVED_RETENTION_TICKS, EncounterService.MAX_RESOLVED_HISTORY);
         registry.setLastEvaluatedAt(gameTime);
         data.markChanged();
-        return new Report(evaluated, roadblocks, cancellations.size(), List.copyOf(cancellations));
+        return new Report(evaluated, roadblocks, camps, cancellations.size(), List.copyOf(cancellations));
     }
 }

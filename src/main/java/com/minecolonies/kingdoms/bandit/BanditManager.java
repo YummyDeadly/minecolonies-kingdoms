@@ -64,6 +64,7 @@ public final class BanditManager
     private final Map<UUID, Double> remoteCache = new HashMap<>();
     private int remoteCacheSettlements = -1;
     private final BanditProfiler profiler = new BanditProfiler();
+    private final CampWorks campWorks = new CampWorks();
     private MinecraftServer server;
 
     private BanditManager() {}
@@ -88,6 +89,7 @@ public final class BanditManager
         roster.clear();
         remoteCache.clear();
         remoteCacheSettlements = -1;
+        campWorks.clear();
     }
 
     // ------------------------------------------------------------------------------------------------ cycle
@@ -119,7 +121,7 @@ public final class BanditManager
         }
         final long last = data.bandits().lastEvaluatedAt();
         if (last < 0L || gameTime - last >= settings.evaluationIntervalTicks()) evaluate(data, gameTime, settings, contracts);
-        for (final EncounterService.Resolution resolution : EncounterService.cancelStale(data, gameTime, contracts)) finish(data, resolution);
+        for (final EncounterService.Resolution resolution : EncounterService.cancelStale(data, gameTime, settings, contracts)) finish(data, resolution);
         for (final BanditEncounter encounter : EncounterService.activateDue(data, gameTime, settings, contracts))
         {
             profiler.activated();
@@ -128,6 +130,8 @@ public final class BanditManager
             SecurityContracts.post(data, gameTime, settings, contracts);
         }
         EncounterService.enforceHolds(data, gameTime);
+        if (!CampService.recruit(data, gameTime, settings).isEmpty()) profiler.campRecruit();
+        campWorks.update(data, gameTime, settings, this::level).ifPresent(done -> profiler.campWork());
         updatePhysical(data, gameTime, settings, contracts);
         materializeNearby(data, gameTime, settings);
         for (final EncounterService.Resolution resolution : EncounterService.resolveDue(data, gameTime, settings, contracts))
@@ -166,6 +170,11 @@ public final class BanditManager
             road -> remoteCache.computeIfAbsent(road.id(), id -> EncounterPlanner.remoteLength(road, anchors, settings.settlementExclusionRadius())),
             anchors, gameTime, settings, contracts);
         if (report.roadblocks() > 0) KingdomsMod.LOGGER.info("Bandits set up {} roadblock(s)", report.roadblocks());
+        if (report.camps() > 0)
+        {
+            profiler.campsEstablished(report.camps());
+            KingdomsMod.LOGGER.info("Bandits settled {} new camp(s)", report.camps());
+        }
         report.cancellations().forEach(resolution -> finish(data, resolution));
         SecurityContracts.post(data, gameTime, settings, contracts);
         profiler.evaluation();
@@ -253,6 +262,7 @@ public final class BanditManager
         for (final Candidate candidate : candidates)
         {
             final BanditEncounter encounter = candidate.encounter();
+            if (!campWorks.readyToMaterialize(data, encounter, candidate.level(), gameTime, settings)) continue;
             final UUID observer = candidate.player() == null ? null : candidate.player().getUUID();
             final int count = roster.allowance(observer, encounter.remainingStrength(), settings);
             if (count <= 0) continue;
@@ -269,8 +279,12 @@ public final class BanditManager
             profiler.materialized();
             data.markChanged();
             notifyNear(candidate.level(), encounter.position(), settings.dematerializationRadius(),
-                Component.literal(encounter.kind() == BanditEncounter.Kind.AMBUSH ? "Bandits are attacking a caravan nearby!"
-                    : "Bandits have blocked the road ahead!").withStyle(ChatFormatting.RED));
+                Component.literal(switch (encounter.kind())
+                {
+                    case AMBUSH -> "Bandits are attacking a caravan nearby!";
+                    case ROADBLOCK -> "Bandits have blocked the road ahead!";
+                    case CAMP -> "You have found a bandit camp!";
+                }).withStyle(ChatFormatting.RED));
         }
     }
 
@@ -309,6 +323,7 @@ public final class BanditManager
             encounter.representation(BanditEncounter.Representation.ABSTRACT);
             // leaving never decides the fight on the spot
             encounter.deferResolution(gameTime, settings.abstractResolveTicks() / 2);
+            encounter.deferExpiry(gameTime, settings.abstractResolveTicks() / 2);
             data.markChanged();
         }
         profiler.dematerialized();
@@ -360,8 +375,12 @@ public final class BanditManager
         if (encounter.outcome() == null) return "The bandit threat is gone.";
         return switch (encounter.outcome())
         {
-            case BANDITS_DEFEATED -> encounter.kind() == BanditEncounter.Kind.AMBUSH ? "The bandits are beaten; the caravan continues."
-                : "The road is clear of bandits.";
+            case BANDITS_DEFEATED -> switch (encounter.kind())
+            {
+                case AMBUSH -> "The bandits are beaten; the caravan continues.";
+                case ROADBLOCK -> "The road is clear of bandits.";
+                case CAMP -> "The bandit camp is cleared.";
+            };
             case CARAVAN_ESCAPED -> "The caravan got away from the bandits.";
             case CARAVAN_DELAYED -> "The caravan got away, but lost time.";
             case PARTIAL_LOSS -> "Bandits robbed the caravan: " + encounter.cargoLost() + " of " + encounter.cargoBefore() + " "
@@ -382,10 +401,8 @@ public final class BanditManager
         if (!isCurrent(bandit) || server == null) return;
         roster.presence(bandit.encounterId()).ifPresent(presence -> presence.progress(server.overworld().getGameTime()));
         final KingdomsSavedData data = KingdomsSavedData.get(server.overworld());
-        data.bandits().encounter(bandit.encounterId()).filter(BanditEncounter::open).ifPresent(encounter -> {
-            encounter.defender(player.getUUID());
-            data.markChanged();
-        });
+        data.bandits().encounter(bandit.encounterId()).filter(BanditEncounter::open)
+            .ifPresent(encounter -> EncounterService.recordDefender(data, encounter, player.getUUID()));
     }
 
     /** One bandit died: the encounter's persisted strength drops by one (no reward, no reputation per kill). */
@@ -397,8 +414,8 @@ public final class BanditManager
         roster.drop(bandit.getUUID());
         profiler.banditDeath();
         data.bandits().encounter(bandit.encounterId()).filter(BanditEncounter::open).ifPresent(encounter -> {
+            if (killer != null) EncounterService.recordDefender(data, encounter, killer.getUUID());
             encounter.banditLost();
-            if (killer != null) encounter.defender(killer.getUUID());
             data.markChanged();
         });
     }
@@ -468,7 +485,7 @@ public final class BanditManager
     {
         final KingdomsSavedData data = KingdomsSavedData.get(value.overworld());
         final EncounterService.Resolution resolution = EncounterService.cancel(data, encounter, BanditEncounter.Cause.ADMIN,
-            value.overworld().getGameTime(), ContractManager.settings());
+            value.overworld().getGameTime(), settingsFromConfig(), ContractManager.settings());
         finish(data, resolution);
         return resolution;
     }
@@ -502,6 +519,49 @@ public final class BanditManager
             }
         }
         return Optional.empty();
+    }
+
+    /** Operator test: establish a camp beside this road now (ignores threat, pressure, cooldowns, and caps). */
+    public Optional<BanditCamp> establishCampNow(final MinecraftServer value, final RoadRecord road)
+    {
+        final KingdomsSavedData data = KingdomsSavedData.get(value.overworld());
+        final long gameTime = value.overworld().getGameTime();
+        final BanditSettings settings = settingsFromConfig();
+        final Optional<BanditCamp> camp = CampService.establish(data, road, anchors(data), gameTime, settings, true);
+        if (camp.isPresent())
+        {
+            profiler.campsEstablished(1);
+            SecurityContracts.post(data, gameTime, settings, ContractManager.settings());
+        }
+        return camp;
+    }
+
+    /** Operator: build the camp's structure now if a site passes (chunk ownership waived; every other check applies). */
+    public Optional<String> buildCampNow(final MinecraftServer value, final BanditCamp camp)
+    {
+        final ServerLevel level = level(camp.dimension());
+        if (level == null) return Optional.of("dimension not loaded");
+        return campWorks.build(KingdomsSavedData.get(value.overworld()), camp, level, value.overworld().getGameTime(), settingsFromConfig(),
+            true);
+    }
+
+    /** Operator: end a camp now; its fight is cancelled through the encounter transaction. */
+    public boolean disbandCampNow(final MinecraftServer value, final BanditCamp camp)
+    {
+        final KingdomsSavedData data = KingdomsSavedData.get(value.overworld());
+        // an open fight is cancelled through the normal path, so contract holders are told and bandits removed
+        data.bandits().encounter(camp.encounterId()).filter(BanditEncounter::open).ifPresent(encounter -> cancelNow(value, encounter));
+        final boolean ended = !camp.active()
+            || CampService.disband(data, camp, value.overworld().getGameTime(), settingsFromConfig(), ContractManager.settings());
+        discard(level(camp.dimension()), roster.end(camp.encounterId()));
+        return ended;
+    }
+
+    /** Operator: take the camp's placed blocks down now (only blocks that are still exactly what was placed). */
+    public boolean removeCampNow(final MinecraftServer value, final BanditCamp camp)
+    {
+        final ServerLevel level = level(camp.dimension());
+        return level != null && campWorks.remove(KingdomsSavedData.get(value.overworld()), camp, level, value.overworld().getGameTime(), true);
     }
 
     public void setThreat(final MinecraftServer value, final UUID roadId, final double threat)
@@ -564,6 +624,10 @@ public final class BanditManager
             config.banditsSettlementExclusionRadius.get(), config.banditsBaseThreat.get(), config.banditsThreatStep.get(),
             config.banditsEncounterCooldownTicks.get(), config.banditsAmbushChanceAtMaxThreat.get(),
             config.banditsAbstractResolveTicks.get(), config.banditsRoadblockThreshold.get(), config.banditsRoadblockLifetimeTicks.get(),
-            config.banditsSuppressionTicks.get(), config.banditsMaxActiveEncounters.get());
+            config.banditsSuppressionTicks.get(), config.banditsMaxActiveEncounters.get(),
+            new CampSettings(config.campsEnabled.get(), config.campsThreshold.get(), config.campsPressureEvaluations.get(),
+                config.campsMax.get(), config.campsMinStrength.get(), Math.max(config.campsMinStrength.get(), config.campsMaxStrength.get()),
+                config.campsLifetimeTicks.get(), config.campsRespawnCooldownTicks.get(), config.campsThreatContribution.get(),
+                config.campsRecruitIntervalTicks.get(), config.campsStructures.get(), config.campsMaxInhabitedTicks.get()));
     }
 }

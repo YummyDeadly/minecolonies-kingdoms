@@ -318,8 +318,11 @@ public final class ContractService
 
     // ------------------------------------------------------------------------------------------------ security (Phase 8)
 
-    /** At most this many open security (escort/clear) contracts per settlement, on top of the delivery cap. */
-    public static final int MAX_SECURITY_PER_SETTLEMENT = 1;
+    /**
+     * At most this many open security (escort/clear) contracts per settlement, on top of the delivery cap. Two, so a
+     * long-lived camp contract never keeps a settlement from asking for an escort.
+     */
+    public static final int MAX_SECURITY_PER_SETTLEMENT = 2;
 
     /**
      * Posts a security offer for a real bandit encounter, if the settlement posts contracts, has no other open
@@ -350,8 +353,8 @@ public final class ContractService
 
     /**
      * Closes every open contract that targets a resolved encounter, exactly once. An accepted contract completes when
-     * the players won and its holder fought ({@code defenders}); an escort fails if the bandits won, and a clear-the-road
-     * contract fails if its roadblock outlived its lifetime ({@code clearMissed}); anything else is cancelled without
+     * the players won and its holder fought ({@code defenders}); an escort fails if the bandits won, and a clear contract
+     * fails if its roadblock or camp outlived its lifetime ({@code clearMissed}); anything else is cancelled without
      * penalty (the objective no longer exists). Completed rewards stay pending until paid.
      */
     public static List<Closure> onEncounterResolved(final KingdomsSavedData data, final UUID encounterId, final boolean playersWon,
@@ -374,7 +377,7 @@ public final class ContractService
                 closures.add(new Closure(contract, applyCompletionReputation(data, contract, gameTime)));
             }
             else if ((banditsWon && contract.kind() == Contract.Kind.ESCORT_CARAVAN)
-                || (clearMissed && contract.kind() == Contract.Kind.CLEAR_BANDITS))
+                || (clearMissed && (contract.kind() == Contract.Kind.CLEAR_BANDITS || contract.kind() == Contract.Kind.CLEAR_CAMP)))
                 closures.add(new Closure(contract, fail(data, contract, gameTime, settings)));
             else
             {

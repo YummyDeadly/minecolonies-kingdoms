@@ -7,10 +7,11 @@ import com.minecolonies.kingdoms.world.settlement.SettlementType;
  * {@code threatStep} per evaluation, so it never oscillates:
  *
  * <pre>
- * target = base + traffic + remoteness + raidMomentum - security - suppression      (clamped to 0..100)
+ * target = base + traffic + remoteness + raidMomentum + camp - security - suppression      (clamped to 0..100)
  * traffic      = min(30, 6 x recent shipments on the road)       more caravans attract bandits
  * remoteness   = min(25, road length outside settlement zones / 40)
  * raidMomentum = min(25, momentum)          +15 per successful raid, x0.9 per evaluation
+ * camp         = configured contribution while a bandit camp is active beside the road (Phase 8.1)
  * security     = min(40, 8 x (security of both endpoint settlements))
  * suppression  = 50 while the road was recently cleared
  * </pre>
@@ -27,20 +28,35 @@ public final class ThreatRules
 
     private ThreatRules() {}
 
-    public record Contributors(double base, double traffic, double remoteness, double momentum, double security, double suppression)
+    public record Contributors(double base, double traffic, double remoteness, double momentum, double camp, double security,
+        double suppression)
     {
         public double target()
         {
-            return clamp(base + traffic + remoteness + momentum - security - suppression);
+            return clamp(base + traffic + remoteness + momentum + camp - security - suppression);
         }
     }
 
     public static Contributors contributors(final double base, final double recentTraffic, final double remoteLength,
         final double raidMomentum, final int security, final boolean suppressed)
     {
+        return contributors(base, recentTraffic, remoteLength, raidMomentum, 0.0D, security, suppressed);
+    }
+
+    public static Contributors contributors(final double base, final double recentTraffic, final double remoteLength,
+        final double raidMomentum, final double camp, final int security, final boolean suppressed)
+    {
         return new Contributors(base, Math.min(30.0D, 6.0D * Math.max(0.0D, recentTraffic)),
             Math.min(25.0D, Math.max(0.0D, remoteLength) / 40.0D), Math.min(25.0D, Math.max(0.0D, raidMomentum)),
-            Math.min(40.0D, 8.0D * Math.max(0, security)), suppressed ? 50.0D : 0.0D);
+            Math.max(0.0D, camp), Math.min(40.0D, 8.0D * Math.max(0, security)), suppressed ? 50.0D : 0.0D);
+    }
+
+    /** Bandits in a new camp: the minimum at the camp threshold, the maximum at threat 100. */
+    public static int campStrength(final double threat, final CampSettings settings)
+    {
+        final double span = Math.max(1.0E-6D, MAXIMUM - settings.threshold());
+        final double share = Math.max(0.0D, Math.min(1.0D, (threat - settings.threshold()) / span));
+        return settings.minStrength() + (int) Math.round(share * (settings.maxStrength() - settings.minStrength()));
     }
 
     /** Moves towards the target by at most {@code step}. */

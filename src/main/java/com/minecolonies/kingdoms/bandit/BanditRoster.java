@@ -183,7 +183,7 @@ final class BanditRoster
     }
 
     /**
-     * Stuck recovery: nobody fought for {@link BanditManager#STALL_TICKS}, or a roadblock outlived its lifetime and
+     * Stuck recovery: nobody fought for {@link BanditManager#STALL_TICKS}, or a roadblock or camp outlived its lifetime and
      * nobody fought for {@link BanditManager#EXPIRY_GRACE_TICKS}. The encounter then goes abstract and stays abstract
      * long enough for its abstract rules to settle it.
      */
@@ -191,7 +191,7 @@ final class BanditRoster
     {
         final long idle = gameTime - presence.lastProgressAt;
         if (idle > BanditManager.STALL_TICKS) return true;
-        return encounter.kind() == BanditEncounter.Kind.ROADBLOCK && gameTime >= encounter.expiresAt() && idle > BanditManager.EXPIRY_GRACE_TICKS;
+        return encounter.kind() != BanditEncounter.Kind.AMBUSH && gameTime >= encounter.expiresAt() && idle > BanditManager.EXPIRY_GRACE_TICKS;
     }
 
     /** How long a stalled encounter stays abstract: past its deferred abstract resolution, plus a margin of two cycles. */

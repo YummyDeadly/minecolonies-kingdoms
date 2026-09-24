@@ -90,6 +90,7 @@ public final class KingdomsCommands
             .then(ContractCommands.reputationCommand())
             .then(DiplomacyCommands.diplomacyCommand())
             .then(BanditCommands.banditCommand())
+            .then(CampCommands.campCommand())
             .then(Commands.literal("simulation")
                 .requires(source -> source.hasPermission(2))
                 .executes(context -> showSimulation(context.getSource()))

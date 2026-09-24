@@ -81,6 +81,13 @@ final class BanditCommands
             data.bandits().threats().size(), dangerous, planned, active, manager.physicalEncounters(), manager.physicalBandits(),
             data.bandits().assessments())).withStyle(ChatFormatting.GOLD), false);
         source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
+            "Camps: active=%d built=%d unbuildable=%d ended=%d | established=%d recruits=%d structure ops=%d",
+            data.bandits().activeCamps().size(),
+            data.bandits().camps().stream().filter(value -> value.structure() == com.minecolonies.kingdoms.bandit.BanditCamp.Structure.BUILT).count(),
+            data.bandits().camps().stream().filter(value -> value.structure() == com.minecolonies.kingdoms.bandit.BanditCamp.Structure.UNBUILDABLE).count(),
+            data.bandits().camps().stream().filter(value -> !value.active()).count(),
+            stats.campsEstablished(), stats.campRecruits(), stats.campWorks())), false);
+        source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
             "evaluations=%d planned=%d activated=%d abstract=%d physical=%d overruns=%d materialized=%d failures=%d dematerialized=%d deaths=%d fled=%d stalls=%d | cycle avg=%.3fms max=%.3fms (%d cycles)",
             stats.evaluations(), stats.planned(), stats.activated(), stats.abstractResolutions(), stats.physicalResolutions(),
             stats.overruns(), stats.materializations(), stats.materializationFailures(), stats.dematerializations(), stats.banditDeaths(),
@@ -180,8 +187,12 @@ final class BanditCommands
             source.sendSuccess(() -> threatLine(data, value, gameTime), false);
             final var c = value.lastContributors();
             source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
-                "  target %.1f = base %.1f + traffic %.1f + remoteness %.1f + momentum %.1f - security %.1f - suppression %.1f",
-                c.target(), c.base(), c.traffic(), c.remoteness(), c.momentum(), c.security(), c.suppression())), false);
+                "  target %.1f = base %.1f + traffic %.1f + remoteness %.1f + momentum %.1f + camp %.1f - security %.1f - suppression %.1f",
+                c.target(), c.base(), c.traffic(), c.remoteness(), c.momentum(), c.camp(), c.security(), c.suppression())), false);
+            source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
+                "  camp pressure %d, camps so far %d, camp cooldown %s; active camp: %s", value.campPressure(), value.camps(),
+                value.campCoolingDownAt(gameTime) ? "until " + value.campCooldownUntil() : "none",
+                data.bandits().activeCampOn(id).map(camp -> camp.id() + " at " + camp.position().toShortString()).orElse("none"))), false);
             source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
                 "  ambush chance per caravan now %.0f%%; raids %d, defeats %d, roadblocks %d; next encounter: %s",
                 100.0D * ambushChanceNow(value, gameTime), value.raids(), value.defeats(), value.roadblocks(),
@@ -318,7 +329,7 @@ final class BanditCommands
         return data.settlements().get(settlementId).map(SettlementRecord::name).orElse("?");
     }
 
-    private static String playerName(final CommandSourceStack source, final UUID playerId)
+    static String playerName(final CommandSourceStack source, final UUID playerId)
     {
         final var player = source.getServer().getPlayerList().getPlayer(playerId);
         return player == null ? playerId.toString() : player.getGameProfile().getName();
@@ -333,7 +344,7 @@ final class BanditCommands
         return encounter;
     }
 
-    private static UUID uuid(final CommandSourceStack source, final String text)
+    static UUID uuid(final CommandSourceStack source, final String text)
     {
         try { return UUID.fromString(text); }
         catch (IllegalArgumentException exception)

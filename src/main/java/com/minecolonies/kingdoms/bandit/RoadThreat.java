@@ -21,7 +21,10 @@ public final class RoadThreat
     private int raids;
     private int defeats;
     private int roadblocks;
-    private ThreatRules.Contributors lastContributors = new ThreatRules.Contributors(0, 0, 0, 0, 0, 0);
+    private int campPressure;
+    private long campCooldownUntil = Long.MIN_VALUE;
+    private int camps;
+    private ThreatRules.Contributors lastContributors = new ThreatRules.Contributors(0, 0, 0, 0, 0, 0, 0);
 
     public RoadThreat(final UUID roadId)
     {
@@ -39,6 +42,12 @@ public final class RoadThreat
     public int defeats() { return defeats; }
     public int roadblocks() { return roadblocks; }
     public ThreatRules.Contributors lastContributors() { return lastContributors; }
+    /** Consecutive evaluations at or above the camp threshold (Phase 8.1). */
+    public int campPressure() { return campPressure; }
+    public long campCooldownUntil() { return campCooldownUntil; }
+    public boolean campCoolingDownAt(final long gameTime) { return campCooldownUntil > gameTime; }
+    /** Camps this road has had (the next camp's ordinal is this plus one). */
+    public int camps() { return camps; }
     public boolean suppressedAt(final long gameTime) { return suppressedUntil > gameTime; }
     public boolean coolingDownAt(final long gameTime) { return cooldownUntil > gameTime; }
 
@@ -74,6 +83,26 @@ public final class RoadThreat
 
     int nextRoadblockOrdinal() { return ++roadblocks; }
 
+    /** One evaluation's camp pressure: grows while the threat stays at or above the threshold, else resets. */
+    int observeCampPressure(final boolean above)
+    {
+        campPressure = above ? Math.min(1_000, campPressure + 1) : 0;
+        return campPressure;
+    }
+
+    /** A camp with this ordinal was established: the next one gets a higher ordinal, and the pressure starts again. */
+    void campEstablished(final int ordinal)
+    {
+        campPressure = 0;
+        camps = Math.max(camps, ordinal);
+    }
+
+    void campEnded(final long gameTime, final long cooldown)
+    {
+        campPressure = 0;
+        campCooldownUntil = Math.max(campCooldownUntil, gameTime + cooldown);
+    }
+
     /** Operator/debug override. */
     public void setThreat(final double value) { threat = ThreatRules.clamp(value); }
 
@@ -90,6 +119,9 @@ public final class RoadThreat
         tag.putInt("raids", raids);
         tag.putInt("defeats", defeats);
         tag.putInt("roadblocks", roadblocks);
+        tag.putInt("campPressure", campPressure);
+        tag.putLong("campCooldownUntil", campCooldownUntil);
+        tag.putInt("camps", camps);
         final ThreatRules.Contributors c = lastContributors;
         tag.putDouble("cBase", c.base());
         tag.putDouble("cTraffic", c.traffic());
@@ -97,6 +129,7 @@ public final class RoadThreat
         tag.putDouble("cMomentum", c.momentum());
         tag.putDouble("cSecurity", c.security());
         tag.putDouble("cSuppression", c.suppression());
+        tag.putDouble("cCamp", c.camp());
         return tag;
     }
 
@@ -112,8 +145,12 @@ public final class RoadThreat
         record.raids = Math.max(0, tag.getInt("raids"));
         record.defeats = Math.max(0, tag.getInt("defeats"));
         record.roadblocks = Math.max(0, tag.getInt("roadblocks"));
+        record.campPressure = Math.max(0, tag.getInt("campPressure"));
+        record.campCooldownUntil = tag.contains("campCooldownUntil") ? tag.getLong("campCooldownUntil") : Long.MIN_VALUE;
+        record.camps = Math.max(0, tag.getInt("camps"));
         record.lastContributors = new ThreatRules.Contributors(tag.getDouble("cBase"), tag.getDouble("cTraffic"),
-            tag.getDouble("cRemoteness"), tag.getDouble("cMomentum"), tag.getDouble("cSecurity"), tag.getDouble("cSuppression"));
+            tag.getDouble("cRemoteness"), tag.getDouble("cMomentum"), tag.getDouble("cCamp"), tag.getDouble("cSecurity"),
+            tag.getDouble("cSuppression"));
         return record;
     }
 }

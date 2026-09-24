@@ -16,12 +16,14 @@ import java.util.List;
 /**
  * Security contracts come only from real, open encounters, through the Phase 7 contract service (reservation at
  * acceptance, exactly-once reward and reputation): an escort offer from the owner of a caravan that bandits are
- * waiting for, and a clear-the-road offer from the settlement nearest to a roadblock. One contract per encounter.
+ * waiting for, a clear-the-road offer from the settlement nearest to a roadblock, and a clear-the-camp offer from the
+ * settlement nearest to a bandit camp (Phase 8.1). One contract per encounter.
  */
 public final class SecurityContracts
 {
     public static final int ESCORT_REPUTATION = 5;
     public static final int CLEAR_REPUTATION = 6;
+    public static final int CAMP_REPUTATION = 8;
     /** Offers stay up at least this long, so a player has time to react. */
     public static final long MINIMUM_OFFER_TICKS = 1_200L;
 
@@ -29,6 +31,7 @@ public final class SecurityContracts
 
     public static int escortReward(final int strength) { return 3 + 2 * Math.max(1, strength); }
     public static int clearReward(final int strength) { return 4 + 2 * Math.max(1, strength); }
+    public static int campReward(final int strength) { return 6 + 3 * Math.max(1, strength); }
 
     public static List<Contract> post(final KingdomsSavedData data, final long gameTime, final BanditSettings settings,
         final ContractSettings contractSettings)
@@ -63,9 +66,11 @@ public final class SecurityContracts
                 if (road == null) continue;
                 final var issuer = EncounterService.nearestEndpoint(data, road, encounter.position()).orElse(null);
                 if (issuer == null) continue;
-                final Contract.Objective objective = new Contract.Objective(Contract.Kind.CLEAR_BANDITS, null,
-                    encounter.remainingStrength(), NeedSeverity.HIGH, 0.0D, 0.0D, clearReward(encounter.remainingStrength()),
-                    CLEAR_REPUTATION, encounter.id(), null, encounter.position());
+                final boolean camp = encounter.kind() == BanditEncounter.Kind.CAMP;
+                final Contract.Objective objective = new Contract.Objective(camp ? Contract.Kind.CLEAR_CAMP : Contract.Kind.CLEAR_BANDITS,
+                    null, encounter.remainingStrength(), NeedSeverity.HIGH, 0.0D, 0.0D,
+                    camp ? campReward(encounter.remainingStrength()) : clearReward(encounter.remainingStrength()),
+                    camp ? CAMP_REPUTATION : CLEAR_REPUTATION, encounter.id(), null, encounter.position());
                 ContractService.postSecurityOffer(data, issuer.id(), objective, gameTime,
                     Math.max(gameTime + MINIMUM_OFFER_TICKS, encounter.expiresAt()), contractSettings).ifPresent(posted::add);
             }

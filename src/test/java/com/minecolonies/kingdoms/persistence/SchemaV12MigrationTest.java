@@ -57,7 +57,7 @@ class SchemaV12MigrationTest
         for (int index = 0; index < contracts.size(); index++) contracts.getCompound(index).remove("kind"); // format 2 records
         v11.getCompound("contracts").putInt("format", 2);
         final KingdomsSavedData loaded = PersistenceTestAccess.load(v11);
-        assertEquals(12, KingdomsSavedData.DATA_VERSION);
+        assertTrue(KingdomsSavedData.DATA_VERSION >= 12);
         assertTrue(loaded.bandits().encounters().isEmpty());
         assertTrue(loaded.bandits().threats().isEmpty());
         assertEquals(-1L, loaded.bandits().lastEvaluatedAt());

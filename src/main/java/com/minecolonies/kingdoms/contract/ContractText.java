@@ -44,6 +44,7 @@ public final class ContractText
             case ESCORT_CARAVAN -> "Escort: defend the caravan carrying " + objective.amount() + " "
                 + objective.resource().name().toLowerCase(Locale.ROOT) + " from bandits" + where;
             case CLEAR_BANDITS -> "Clear the road: " + objective.amount() + " bandits" + where;
+            case CLEAR_CAMP -> "Clear the bandit camp: " + objective.amount() + " bandits" + where;
         };
     }
 
@@ -53,7 +54,7 @@ public final class ContractText
         return switch (contract.kind())
         {
             case DELIVERY -> resource(contract.resource()) + " " + contract.delivered() + "/" + contract.amount();
-            case ESCORT_CARAVAN, CLEAR_BANDITS -> describe(contract);
+            case ESCORT_CARAVAN, CLEAR_BANDITS, CLEAR_CAMP -> describe(contract);
         };
     }
 
