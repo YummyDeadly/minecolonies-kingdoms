@@ -236,7 +236,8 @@ public final class ArmyRecord
         army.strength = Math.max(0, Math.min(army.detached, tag.getInt("strength")));
         army.status = Status.valueOf(tag.getString("status"));
         army.legStartedAt = tag.getLong("legStartedAt");
-        army.legStartProgress = Math.max(0.0D, Math.min(1.0D, tag.getDouble("legStartProgress")));
+        final double progress = tag.getDouble("legStartProgress");
+        army.legStartProgress = Double.isFinite(progress) ? Math.max(0.0D, Math.min(1.0D, progress)) : 0.0D;
         army.outbound = tag.getBoolean("outbound");
         army.battleId = tag.hasUUID("battle") ? tag.getUUID("battle") : null;
         army.skirmishLosses = Math.max(0, tag.getInt("skirmishLosses"));

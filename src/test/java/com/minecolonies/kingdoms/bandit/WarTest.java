@@ -348,4 +348,52 @@ class WarTest
         CampaignService.hold(data, army, Double.NaN, half + 300L);
         assertEquals(at, army.progressAt(half + 200L), 1.0E-9, "garbage is ignored");
     }
+
+    @Test
+    void aSiegeWhoseArmyRecordIsLostIsCalledOffAndNothingIsDecidedAfterPeace()
+    {
+        final KingdomsSavedData data = armed(12, 4);
+        final WarRecord war = activeWar(data, 0L);
+        CampaignService.update(data, 100L, WAR, CONTRACTS);
+        final ArmyRecord army = onlyArmy(data);
+        final long arrival = 100L + army.fullTravelTicks();
+        final BattleRecord battle = CampaignService.update(data, arrival, WAR, CONTRACTS).started().getFirst();
+        final Contract defend = data.contracts().targeting(battle.id()).getFirst();
+        assertTrue(ContractService.accept(data, PLAYER, defend, arrival + 5L, CONTRACTS).isEmpty());
+        // the army record becomes unreadable: the siege must not stay open forever
+        final net.minecraft.nbt.CompoundTag saved = data.save(new net.minecraft.nbt.CompoundTag(), null);
+        saved.getCompound("war").getList("armies", 10).getCompound(0).putString("status", "NOT_A_STATUS");
+        final KingdomsSavedData damaged = PersistenceTestAccess.load(saved);
+        assertTrue(damaged.war().army(army.id()).isEmpty());
+        final CampaignService.Update update = CampaignService.update(damaged, arrival + 50L, WAR, CONTRACTS);
+        assertEquals(1, update.cancelled().size());
+        assertEquals(BattleRecord.Status.CANCELLED, damaged.war().battle(battle.id()).orElseThrow().status());
+        final Contract reloaded = damaged.contracts().get(defend.id()).orElseThrow();
+        assertEquals(ContractStatus.CANCELLED, reloaded.status(), "the holder is released without penalty");
+        assertEquals(0, damaged.military().garrison(A).orElseThrow().detached(), "the lost army's soldiers are no longer counted away");
+        // peace first, then an operator resolution: nothing is decided after peace
+        final KingdomsSavedData second = armed(12, 4);
+        final WarRecord other = activeWar(second, 0L);
+        CampaignService.update(second, 100L, WAR, CONTRACTS);
+        final ArmyRecord marching = onlyArmy(second);
+        final BattleRecord siege = CampaignService.update(second, 100L + marching.fullTravelTicks(), WAR, CONTRACTS).started().getFirst();
+        WarService.end(second, other, WarRecord.Result.WHITE_PEACE, 100L + marching.fullTravelTicks() + 10L, WAR);
+        assertFalse(CampaignService.resolveBattle(second, siege, 100L + marching.fullTravelTicks() + 20L, WAR, CONTRACTS).applied());
+        assertEquals(BattleRecord.Status.CANCELLED, siege.status());
+        assertEquals(0, other.score(), "an ended war's score never moves");
+        assertEquals(4, garrison(second, B).strength());
+        assertNotNull(war);
+    }
+
+    @Test
+    void aWarWhoseFactionIsGoneEndsInWhitePeace()
+    {
+        final KingdomsSavedData data = armed(12, 4);
+        final WarRecord war = activeWar(data, 0L);
+        data.removeFaction(FB);
+        final WarService.Evaluation evaluation = WarService.evaluate(data, DAY, WAR);
+        assertEquals(1, evaluation.ended().size());
+        assertEquals(WarRecord.Result.WHITE_PEACE, war.result());
+        assertTrue(WarService.openWarOf(data, FA).isEmpty(), "the surviving side is free again");
+    }
 }

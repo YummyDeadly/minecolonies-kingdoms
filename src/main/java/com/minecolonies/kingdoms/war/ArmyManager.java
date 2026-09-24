@@ -33,6 +33,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.common.util.FakePlayer;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -367,7 +368,7 @@ public final class ArmyManager implements GuardEvents
 
     public void onSoldierHurt(final SoldierEntity entity, final DamageSource source)
     {
-        if (server == null || !isCurrent(entity) || !(source.getEntity() instanceof ServerPlayer player)) return;
+        if (server == null || !isCurrent(entity) || !(source.getEntity() instanceof ServerPlayer player) || player instanceof FakePlayer) return;
         final KingdomsSavedData data = KingdomsSavedData.get(server.overworld());
         battleOf(data, entity).ifPresent(battle -> CampaignService.recordDefender(data, battle, player.getUUID()));
     }
@@ -385,7 +386,7 @@ public final class ArmyManager implements GuardEvents
         if (squad != null) squad.soldiers.remove(entity.getUUID());
         deaths++;
         final Entity killer = source.getEntity();
-        final ServerPlayer player = killer instanceof ServerPlayer value ? value : null;
+        final ServerPlayer player = killer instanceof ServerPlayer value && !(value instanceof FakePlayer) ? value : null; // machines are not people
         final boolean enemyGuard = killer instanceof SettlementGuardEntity guard && enemies(entity, guard);
         if (player == null && !enemyGuard) return;
         final KingdomsSavedData data = KingdomsSavedData.get(server.overworld());

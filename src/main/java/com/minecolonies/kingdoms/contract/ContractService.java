@@ -323,12 +323,16 @@ public final class ContractService
      * aside, so they are never touched) to the payee, in one step. Returns what was actually moved; nothing is created or
      * destroyed. The caller guards against repeating it (a persisted flag on the war or battle).
      */
-    public static int transferTreasury(final KingdomsSavedData data, final UUID payerId, final UUID payeeId, final int amount)
+    public static int transferTreasury(final KingdomsSavedData data, final UUID payerId, final UUID payeeId, final int amount,
+        final long gameTime)
     {
         if (amount <= 0 || payerId == null || payeeId == null || payerId.equals(payeeId)) return 0;
         final Faction payer = data.faction(payerId).orElse(null);
         final Faction payee = data.faction(payeeId).orElse(null);
         if (payer == null || payee == null) return 0;
+        // both treasuries are brought up to date first, so a first accrual can never absorb the transfer
+        accrueTreasury(data, payer, gameTime);
+        accrueTreasury(data, payee, gameTime);
         final int paid = (int) Math.max(0L, Math.min(amount, payer.treasury()));
         if (paid <= 0) return 0;
         payer.setTreasury(payer.treasury() - paid);

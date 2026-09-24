@@ -114,7 +114,7 @@ public final class WarRecord
     /** Records one battle's result once (the battle ID guards against a second application). */
     boolean battle(final UUID battleId, final boolean attackerWon, final int swing)
     {
-        if (battles.contains(battleId)) return false;
+        if (!open() || battles.contains(battleId)) return false;
         battles.add(battleId);
         while (battles.size() > MAX_BATTLES) battles.removeFirst();
         if (attackerWon) battlesWon++;

@@ -105,7 +105,9 @@ public final class WarService
         final List<WarRecord> activated = new ArrayList<>();
         final List<WarRecord> ended = new ArrayList<>();
         final WarState state = data.war().state();
-        for (final DiplomacyEvaluator.Pair pair : DiplomacyEvaluator.neighbourPairs(data))
+        final java.util.Set<DiplomacyEvaluator.Pair> pairs = DiplomacyEvaluator.neighbourPairs(data);
+        state.retainHostility(pairs.stream().map(pair -> WarState.key(pair.first(), pair.second())).collect(java.util.stream.Collectors.toSet()));
+        for (final DiplomacyEvaluator.Pair pair : pairs)
         {
             final Faction a = data.faction(pair.first()).orElse(null);
             final Faction b = data.faction(pair.second()).orElse(null);
@@ -124,6 +126,11 @@ public final class WarService
         }
         for (final WarRecord war : List.copyOf(data.war().wars()))
         {
+            if (war.open() && (data.faction(war.attacker()).isEmpty() || data.faction(war.defender()).isEmpty()))
+            {
+                end(data, war, WarRecord.Result.WHITE_PEACE, gameTime, settings).ifPresent(ended::add); // a side no longer exists
+                continue;
+            }
             if (war.status() == WarRecord.Status.DECLARED && gameTime >= war.activeAt())
             {
                 war.activate();
@@ -187,6 +194,7 @@ public final class WarService
     {
         if (!war.open()) return Optional.empty();
         final UUID payer = payer(war, result);
+        data.faction(payer == null ? war.attacker() : payer).ifPresent(faction -> ContractService.accrueTreasury(data, faction, gameTime));
         final int indemnity = payer == null ? 0 : WarRules.warIndemnity(data.faction(payer).map(Faction::treasury).orElse(0L),
             result == WarRecord.Result.ATTACKER_VICTORY ? war.battlesWon() : war.battlesLost());
         war.end(result, indemnity, gameTime);
@@ -207,7 +215,8 @@ public final class WarService
         if (!war.tributePaid())
         {
             final UUID payer = payer(war, war.result());
-            if (payer != null && war.tribute() > 0) war.tribute(ContractService.transferTreasury(data, payer, war.enemyOf(payer), war.tribute()));
+            if (payer != null && war.tribute() > 0)
+                war.tribute(ContractService.transferTreasury(data, payer, war.enemyOf(payer), war.tribute(), gameTime));
             war.markTributePaid();
         }
         if (!war.peaceApplied())

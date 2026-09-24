@@ -1,5 +1,6 @@
 package com.minecolonies.kingdoms.war;
 
+import com.minecolonies.kingdoms.KingdomsMod;
 import com.minecolonies.kingdoms.colony.need.NeedSeverity;
 import com.minecolonies.kingdoms.contract.Contract;
 import com.minecolonies.kingdoms.contract.ContractService;
@@ -65,6 +66,17 @@ public final class CampaignService
         final List<Resolution> resolved = new ArrayList<>();
         final List<ArmyRecord> disbanded = new ArrayList<>();
         final List<BattleRecord> cancelled = new ArrayList<>();
+        // 0. a siege whose army is gone (an unreadable record) or no longer at it is called off, never left open
+        for (final BattleRecord battle : List.copyOf(data.war().battles()))
+        {
+            if (!battle.open()) continue;
+            final ArmyRecord army = data.war().army(battle.armyId()).orElse(null);
+            if (army == null || !army.open() || army.status() != ArmyRecord.Status.BESIEGING || !battle.id().equals(army.battleId()))
+            {
+                cancelBattle(data, battle, gameTime, contracts);
+                cancelled.add(battle);
+            }
+        }
         // 1. one army per active war in the field at a time
         if (settings.enabled())
             for (final WarRecord war : List.copyOf(data.war().wars()))
@@ -72,44 +84,65 @@ public final class CampaignService
                 if (war.status() != WarRecord.Status.ACTIVE) continue;
                 if (data.war().armies().stream().anyMatch(army -> army.open() && army.warId().equals(war.id()))) continue;
                 if (war.lastArmyAt() != Long.MIN_VALUE && gameTime - war.lastArmyAt() < settings.armyCooldownTicks()) continue;
-                raiseArmy(data, war, gameTime, settings).ifPresent(raised::add);
+                try
+                {
+                    raiseArmy(data, war, gameTime, settings).ifPresent(raised::add);
+                }
+                catch (RuntimeException exception)
+                {
+                    KingdomsMod.LOGGER.error("Raising an army for war {} failed", war.id(), exception);
+                }
             }
-        // 2. armies: arrivals, sieges, returns (armies keep moving home even while wars are switched off)
+        // 2. armies: arrivals, sieges, returns (armies keep moving home even while wars are switched off); each in isolation
         for (final ArmyRecord army : data.war().armies().stream().filter(ArmyRecord::open).sorted(byRaisedAt()).toList())
         {
-            final WarRecord war = data.war().war(army.warId()).orElse(null);
-            final boolean fighting = settings.enabled() && war != null && war.status().fighting();
-            if (army.status() == ArmyRecord.Status.MARCHING)
+            try
             {
-                if (!fighting || army.strength() <= 0) army.returnHome(gameTime);
-                else if (army.arrivedAt(gameTime)) startSiege(data, war, army, gameTime, settings, contracts).ifPresent(started::add);
+                updateArmy(data, army, gameTime, settings, contracts, started, resolved, disbanded, cancelled);
             }
-            else if (army.status() == ArmyRecord.Status.BESIEGING)
+            catch (RuntimeException exception)
             {
-                final BattleRecord battle = army.battleId() == null ? null : data.war().battle(army.battleId()).orElse(null);
-                if (battle == null || !battle.open())
-                {
-                    army.battleOver();
-                    army.returnHome(gameTime);
-                }
-                else if (!fighting)
-                {
-                    cancelBattle(data, battle, gameTime, contracts);
-                    cancelled.add(battle);
-                }
-                else if (gameTime >= battle.resolveAt() || decidedPhysically(battle))
-                    resolved.add(resolveBattle(data, battle, gameTime, settings, contracts));
+                KingdomsMod.LOGGER.error("Campaign update of army {} failed", army.id(), exception);
             }
-            if (army.status() == ArmyRecord.Status.RETURNING && (army.arrivedAt(gameTime) || army.strength() <= 0))
-            {
-                // home, or nobody left to walk home
-                disband(data, army, gameTime);
-                disbanded.add(army);
-            }
-            data.markChanged();
         }
         reconcileGarrisons(data);
         return new Update(List.copyOf(raised), List.copyOf(started), List.copyOf(resolved), List.copyOf(disbanded), List.copyOf(cancelled));
+    }
+
+    private static void updateArmy(final KingdomsSavedData data, final ArmyRecord army, final long gameTime, final WarSettings settings,
+        final ContractSettings contracts, final List<BattleRecord> started, final List<Resolution> resolved, final List<ArmyRecord> disbanded,
+        final List<BattleRecord> cancelled)
+    {
+        final WarRecord war = data.war().war(army.warId()).orElse(null);
+        final boolean fighting = settings.enabled() && war != null && war.status().fighting();
+        if (army.status() == ArmyRecord.Status.MARCHING)
+        {
+            if (!fighting || army.strength() <= 0) army.returnHome(gameTime);
+            else if (army.arrivedAt(gameTime)) startSiege(data, war, army, gameTime, settings, contracts).ifPresent(started::add);
+        }
+        else if (army.status() == ArmyRecord.Status.BESIEGING)
+        {
+            final BattleRecord battle = army.battleId() == null ? null : data.war().battle(army.battleId()).orElse(null);
+            if (battle == null || !battle.open())
+            {
+                army.battleOver();
+                army.returnHome(gameTime);
+            }
+            else if (!fighting)
+            {
+                cancelBattle(data, battle, gameTime, contracts);
+                cancelled.add(battle);
+            }
+            else if (gameTime >= battle.resolveAt() || decidedPhysically(battle))
+                resolved.add(resolveBattle(data, battle, gameTime, settings, contracts));
+        }
+        if (army.status() == ArmyRecord.Status.RETURNING && (army.arrivedAt(gameTime) || army.strength() <= 0))
+        {
+            // home, or nobody left to walk home
+            disband(data, army, gameTime);
+            disbanded.add(army);
+        }
+        data.markChanged();
     }
 
     /** Soldiers counted away with armies must match the armies in the field (heals an unreadable army record). */
@@ -306,6 +339,11 @@ public final class CampaignService
         final ContractSettings contracts)
     {
         if (!battle.open()) return Resolution.notApplied(battle);
+        if (!data.war().war(battle.warId()).map(war -> war.status().fighting()).orElse(false))
+        {
+            cancelBattle(data, battle, gameTime, contracts); // the war is over: no result after peace
+            return Resolution.notApplied(battle);
+        }
         final WarRules.Battle decision = WarRules.decide(battle.seed(), battle.attackerStrength(), battle.defenderStrength(), battle.fortification(),
             battle.attackerPhysicalLosses(), battle.defenderPhysicalLosses());
         battle.resolve(decision.outcome(), decision.attackerLosses(), decision.defenderLosses(), gameTime);
@@ -318,8 +356,9 @@ public final class CampaignService
         final Faction defender = data.faction(battle.defender()).orElse(null);
         if (attackerWon)
         {
+            if (defender != null) ContractService.accrueTreasury(data, defender, gameTime);
             final int tribute = WarRules.sackTribute(defender == null ? 0L : defender.treasury(), battle.defenderStrength());
-            battle.tribute(ContractService.transferTreasury(data, battle.defender(), battle.attacker(), tribute));
+            battle.tribute(ContractService.transferTreasury(data, battle.defender(), battle.attacker(), tribute, gameTime));
             MilitaryService.sacked(data, battle.settlementId(), gameTime + settings.sackedTicks());
         }
         else MilitaryService.defendedBattle(data, battle.settlementId(), battle.id(), gameTime);

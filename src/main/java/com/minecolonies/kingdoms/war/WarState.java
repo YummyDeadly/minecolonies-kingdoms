@@ -41,6 +41,9 @@ public final class WarState
 
     void resetHostility(final UUID a, final UUID b) { hostility.remove(key(a, b)); }
 
+    /** Pairs that are no longer neighbours lose their streak ("consecutive" means evaluated as neighbours every time). */
+    void retainHostility(final java.util.Set<String> neighbours) { hostility.keySet().retainAll(neighbours); }
+
     void truce(final UUID a, final UUID b, final long until) { truces.merge(key(a, b), until, Math::max); }
 
     int nextWarOrdinal(final UUID a, final UUID b) { return ordinals.merge(key(a, b), 1, Integer::sum); }
