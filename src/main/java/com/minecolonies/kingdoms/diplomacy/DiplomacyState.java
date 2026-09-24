@@ -32,7 +32,9 @@ public final class DiplomacyState
         /** A battle between the pair was fought (Phase 10); evidence = 1 if the attacker won. */
         WAR_BATTLE,
         /** A war between the pair ended (Phase 10); evidence = the pair's war ordinal. */
-        PEACE
+        PEACE,
+        /** A world event (Phase 11: border incident or envoy visit); evidence = the world event type's ordinal. */
+        WORLD_EVENT
     }
 
     /** One audited relation change between an unordered pair (first &lt; second). */

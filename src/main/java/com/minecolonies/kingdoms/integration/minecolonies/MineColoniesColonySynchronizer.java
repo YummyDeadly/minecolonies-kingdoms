@@ -68,6 +68,12 @@ public final class MineColoniesColonySynchronizer
         return snapshot;
     }
 
+    /** The Kingdoms colony UUID of a MineColonies colony (stable across restarts). */
+    public static UUID colonyId(final ResourceLocation dimension, final int colonyId)
+    {
+        return stableId("colony", dimension, colonyId);
+    }
+
     private static UUID stableId(final String kind, final ResourceLocation dimension, final int colonyId)
     {
         final String key = "minecolonies_kingdoms:" + kind + ':' + dimension + ':' + colonyId;

@@ -94,6 +94,8 @@ public final class KingdomsCommands
             .then(SecurityCommands.securityCommand())
             .then(WarCommands.warCommand())
             .then(WarCommands.armyCommand())
+            .then(EventCommands.eventCommand())
+            .then(EventCommands.historyCommand())
             .then(Commands.literal("simulation")
                 .requires(source -> source.hasPermission(2))
                 .executes(context -> showSimulation(context.getSource()))
@@ -348,16 +350,7 @@ public final class KingdomsCommands
             source.sendFailure(Component.literal("Only strategic NPC colonies can be deleted by this command"));
             return 0;
         }
-        TradeManager.getInstance().handleColonyDeletion(data, id, source.getLevel().getGameTime());
-        data.removeColony(id);
-        data.faction(colony.factionId()).ifPresent(faction -> {
-            faction.removeSettlement(id);
-            if (faction.settlementIds().isEmpty())
-            {
-                data.removeFaction(faction.id());
-            }
-        });
-        data.markChanged();
+        com.minecolonies.kingdoms.colony.ColonyRemoval.remove(data, id, source.getLevel().getGameTime(), "deleted by an operator");
         source.sendSuccess(() -> Component.literal("Deleted strategic NPC colony " + colony.name())
             .withStyle(ChatFormatting.YELLOW), true);
         return 1;

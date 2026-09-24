@@ -87,6 +87,8 @@ public final class WarService
         DiplomacyService.set(data, a, d, Math.min(DiplomacyService.relation(a, d), WAR_RELATION), DiplomacyState.Cause.WAR_DECLARED, ordinal,
             gameTime);
         data.markChanged();
+        com.minecolonies.kingdoms.worldevent.WorldHistory.record(data, com.minecolonies.kingdoms.worldevent.WorldHistory.Entry.of(com.minecolonies.kingdoms.worldevent.WorldHistory.Kind.WAR_DECLARED, war.id(), gameTime, attacker, defender,
+            a.name() + " declared war on " + d.name() + " (" + cause.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ') + ")"));
         return new Declaration(Optional.of(war), null);
     }
 
@@ -200,6 +202,11 @@ public final class WarService
         war.end(result, indemnity, gameTime);
         applyPeace(data, war, gameTime, settings);
         data.markChanged();
+        final String attackerName = data.faction(war.attacker()).map(Faction::name).orElse("?");
+        final String defenderName = data.faction(war.defender()).map(Faction::name).orElse("?");
+        com.minecolonies.kingdoms.worldevent.WorldHistory.record(data, com.minecolonies.kingdoms.worldevent.WorldHistory.Entry.of(com.minecolonies.kingdoms.worldevent.WorldHistory.Kind.WAR_ENDED, war.id(), gameTime, war.attacker(), war.defender(),
+            "War " + attackerName + " vs " + defenderName + " ended: " + result.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ')
+                + (indemnity > 0 ? " (indemnity " + indemnity + ")" : "")));
         return Optional.of(war);
     }
 

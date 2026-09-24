@@ -187,8 +187,8 @@ final class BanditCommands
             source.sendSuccess(() -> threatLine(data, value, gameTime), false);
             final var c = value.lastContributors();
             source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
-                "  target %.1f = base %.1f + traffic %.1f + remoteness %.1f + momentum %.1f + camp %.1f - security %.1f - suppression %.1f",
-                c.target(), c.base(), c.traffic(), c.remoteness(), c.momentum(), c.camp(), c.security(), c.suppression())), false);
+                "  target %.1f = base %.1f + traffic %.1f + remoteness %.1f + momentum %.1f + camp %.1f + event %.1f - security %.1f - suppression %.1f",
+                c.target(), c.base(), c.traffic(), c.remoteness(), c.momentum(), c.camp(), c.event(), c.security(), c.suppression())), false);
             source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT,
                 "  camp pressure %d, camps so far %d, camp cooldown %s; active camp: %s", value.campPressure(), value.camps(),
                 value.campCoolingDownAt(gameTime) ? "until " + value.campCooldownUntil() : "none",

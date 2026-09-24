@@ -42,6 +42,7 @@ public final class KingdomsDataMigrator
                 case 12 -> migrateV12ToV13(migrated);
                 case 13 -> migrateV13ToV14(migrated);
                 case 14 -> migrateV14ToV15(migrated);
+                case 15 -> migrateV15ToV16(migrated);
                 default -> throw new IllegalStateException("No migration path from schema " + version);
             };
         }
@@ -421,6 +422,14 @@ public final class KingdomsDataMigrator
     {
         if (!root.contains("war", Tag.TAG_COMPOUND)) root.put("war", new CompoundTag());
         return 15;
+    }
+
+    /** Phase 11: empty world events and world history; nothing else changes. */
+    private static int migrateV15ToV16(final CompoundTag root)
+    {
+        if (!root.contains("worldEvents", Tag.TAG_COMPOUND)) root.put("worldEvents", new CompoundTag());
+        if (!root.contains("history", Tag.TAG_COMPOUND)) root.put("history", new CompoundTag());
+        return 16;
     }
 
     private static int migrateV7ToV8(final CompoundTag root)

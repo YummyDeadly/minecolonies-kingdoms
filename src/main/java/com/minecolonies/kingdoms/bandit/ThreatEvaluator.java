@@ -49,7 +49,9 @@ public final class ThreatEvaluator
             final int security = com.minecolonies.kingdoms.military.MilitaryService.level(data, road.firstSettlementId())
                 + com.minecolonies.kingdoms.military.MilitaryService.level(data, road.secondSettlementId());
             threat.evaluate(ThreatRules.contributors(settings.baseThreat(), threat.recentTraffic(), remoteLength.applyAsDouble(road),
-                threat.raidMomentum(), CampService.contribution(data, road.id(), settings), security, threat.suppressedAt(gameTime)),
+                threat.raidMomentum(), CampService.contribution(data, road.id(), settings),
+                com.minecolonies.kingdoms.worldevent.WorldEventService.threatContribution(data, road.id(), gameTime), security,
+                threat.suppressedAt(gameTime)),
                 settings.threatStep(), gameTime);
             evaluated++;
             if (threat.threat() >= settings.roadblockThreshold()

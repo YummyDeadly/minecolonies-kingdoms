@@ -118,6 +118,21 @@ public final class SettlementGrowthEvaluator
         return true;
     }
 
+    /**
+     * People leave a settlement (Phase 11 migration), never below its type's minimum population; workers and soldiers
+     * shrink with it. Returns how many actually left.
+     */
+    public static int emigrate(final NPCColonyData colony, final SettlementRecord settlement, final int wanted)
+    {
+        final int left = Math.max(0, Math.min(wanted, colony.population() - settlement.type().minimumPopulation()));
+        if (left == 0) return 0;
+        final int population = colony.population() - left;
+        final int soldiers = Math.min(colony.soldiers(), population);
+        final int workers = Math.min(colony.workers(), population - soldiers);
+        colony.updatePopulation(population, workers, soldiers);
+        return left;
+    }
+
     private static SettlementBuildingType forNeed(final NeedType type)
     {
         return switch (type)

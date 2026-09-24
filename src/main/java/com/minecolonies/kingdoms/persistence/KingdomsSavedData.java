@@ -27,7 +27,7 @@ import java.util.UUID;
 public final class KingdomsSavedData extends SavedData
 {
     public static final String DATA_NAME = "minecolonies_kingdoms";
-    public static final int DATA_VERSION = 15;
+    public static final int DATA_VERSION = 16;
     public static final SavedData.Factory<KingdomsSavedData> FACTORY =
         new SavedData.Factory<>(KingdomsSavedData::new, KingdomsSavedData::load);
 
@@ -46,6 +46,8 @@ public final class KingdomsSavedData extends SavedData
     private com.minecolonies.kingdoms.bandit.BanditRegistry bandits = new com.minecolonies.kingdoms.bandit.BanditRegistry();
     private com.minecolonies.kingdoms.military.MilitaryRegistry military = new com.minecolonies.kingdoms.military.MilitaryRegistry();
     private com.minecolonies.kingdoms.war.WarRegistry war = new com.minecolonies.kingdoms.war.WarRegistry();
+    private com.minecolonies.kingdoms.worldevent.WorldEventRegistry worldEvents = new com.minecolonies.kingdoms.worldevent.WorldEventRegistry();
+    private com.minecolonies.kingdoms.worldevent.WorldHistory history = new com.minecolonies.kingdoms.worldevent.WorldHistory();
 
     public static KingdomsSavedData get(final ServerLevel level)
     {
@@ -115,6 +117,18 @@ public final class KingdomsSavedData extends SavedData
     public com.minecolonies.kingdoms.war.WarRegistry war()
     {
         return war;
+    }
+
+    /** World events (schema 16); written only by {@code WorldEventService}. */
+    public com.minecolonies.kingdoms.worldevent.WorldEventRegistry worldEvents()
+    {
+        return worldEvents;
+    }
+
+    /** Bounded world history (schema 16); written only through {@code WorldHistory.record}. */
+    public com.minecolonies.kingdoms.worldevent.WorldHistory history()
+    {
+        return history;
     }
 
     /** Player reputation per faction (schema 11); the only store of player standing. */
@@ -230,6 +244,8 @@ public final class KingdomsSavedData extends SavedData
         tag.put("bandits", bandits.save());
         tag.put("military", military.save());
         tag.put("war", war.save());
+        tag.put("worldEvents", worldEvents.save());
+        tag.put("history", history.save());
         return tag;
     }
 
@@ -261,6 +277,8 @@ public final class KingdomsSavedData extends SavedData
         data.bandits = com.minecolonies.kingdoms.bandit.BanditRegistry.load(migrated.getCompound("bandits"));
         data.military = com.minecolonies.kingdoms.military.MilitaryRegistry.load(migrated.getCompound("military"));
         data.war = com.minecolonies.kingdoms.war.WarRegistry.load(migrated.getCompound("war"));
+        data.worldEvents = com.minecolonies.kingdoms.worldevent.WorldEventRegistry.load(migrated.getCompound("worldEvents"));
+        data.history = com.minecolonies.kingdoms.worldevent.WorldHistory.load(migrated.getCompound("history"));
         return data;
     }
 

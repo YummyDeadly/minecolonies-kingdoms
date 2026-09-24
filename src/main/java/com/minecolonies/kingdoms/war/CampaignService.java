@@ -389,6 +389,10 @@ public final class CampaignService
             army.returnHome(gameTime);
         }
         data.markChanged();
+        com.minecolonies.kingdoms.worldevent.WorldHistory.record(data, com.minecolonies.kingdoms.worldevent.WorldHistory.Entry.of(com.minecolonies.kingdoms.worldevent.WorldHistory.Kind.BATTLE, battle.id(), gameTime, battle.attacker(), battle.defender(),
+            "Battle at " + data.settlements().get(battle.settlementId()).map(value -> value.name()).orElse("?") + ": "
+                + battle.outcome().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ') + " (losses " + battle.attackerLosses() + "/"
+                + battle.defenderLosses() + ")"));
         return new Resolution(true, battle, closures, Map.copyOf(reputation));
     }
 

@@ -28,27 +28,35 @@ public final class ThreatRules
 
     private ThreatRules() {}
 
-    public record Contributors(double base, double traffic, double remoteness, double momentum, double camp, double security,
+    /** {@code event}: added by active world events (Phase 11 bandit surges), derived and never stored in the road. */
+    public record Contributors(double base, double traffic, double remoteness, double momentum, double camp, double event, double security,
         double suppression)
     {
         public double target()
         {
-            return clamp(base + traffic + remoteness + momentum + camp - security - suppression);
+            return clamp(base + traffic + remoteness + momentum + camp + event - security - suppression);
         }
     }
 
     public static Contributors contributors(final double base, final double recentTraffic, final double remoteLength,
         final double raidMomentum, final int security, final boolean suppressed)
     {
-        return contributors(base, recentTraffic, remoteLength, raidMomentum, 0.0D, security, suppressed);
+        return contributors(base, recentTraffic, remoteLength, raidMomentum, 0.0D, 0.0D, security, suppressed);
     }
 
     public static Contributors contributors(final double base, final double recentTraffic, final double remoteLength,
         final double raidMomentum, final double camp, final int security, final boolean suppressed)
     {
+        return contributors(base, recentTraffic, remoteLength, raidMomentum, camp, 0.0D, security, suppressed);
+    }
+
+    public static Contributors contributors(final double base, final double recentTraffic, final double remoteLength,
+        final double raidMomentum, final double camp, final double event, final int security, final boolean suppressed)
+    {
         return new Contributors(base, Math.min(30.0D, 6.0D * Math.max(0.0D, recentTraffic)),
             Math.min(25.0D, Math.max(0.0D, remoteLength) / 40.0D), Math.min(25.0D, Math.max(0.0D, raidMomentum)),
-            Math.max(0.0D, camp), Math.min(40.0D, 8.0D * Math.max(0, security)), suppressed ? 50.0D : 0.0D);
+            Math.max(0.0D, camp), Double.isFinite(event) ? Math.max(0.0D, event) : 0.0D, Math.min(40.0D, 8.0D * Math.max(0, security)),
+            suppressed ? 50.0D : 0.0D);
     }
 
     /** Bandits in a new camp: the minimum at the camp threshold, the maximum at threat 100. */

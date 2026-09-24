@@ -77,7 +77,24 @@ public final class CampService
             encounter.id());
         registry.put(camp);
         data.markChanged();
+        com.minecolonies.kingdoms.worldevent.WorldHistory.record(data, com.minecolonies.kingdoms.worldevent.WorldHistory.Entry.of(com.minecolonies.kingdoms.worldevent.WorldHistory.Kind.CAMP_ESTABLISHED, camp.id(), gameTime, road.id(), null,
+            "Bandits camped by " + roadLabel(data, road.id()) + " (" + strength + " bandits)"));
         return Optional.of(camp);
+    }
+
+    /** History of a camp that just ended (cleared or disbanded); recorded once per camp. */
+    private static void recordEnd(final KingdomsSavedData data, final BanditCamp camp, final long gameTime)
+    {
+        final boolean cleared = camp.status() == BanditCamp.Status.CLEARED;
+        com.minecolonies.kingdoms.worldevent.WorldHistory.record(data, com.minecolonies.kingdoms.worldevent.WorldHistory.Entry.of(cleared ? com.minecolonies.kingdoms.worldevent.WorldHistory.Kind.CAMP_CLEARED : com.minecolonies.kingdoms.worldevent.WorldHistory.Kind.CAMP_DISBANDED, camp.id(), gameTime,
+            camp.roadId(), null, "Bandit camp by " + roadLabel(data, camp.roadId()) + (cleared ? " was cleared" : " broke up")));
+    }
+
+    private static String roadLabel(final KingdomsSavedData data, final java.util.UUID roadId)
+    {
+        return data.roads().get(roadId).map(road -> "the road "
+            + data.settlements().get(road.firstSettlementId()).map(value -> value.name()).orElse("?") + " - "
+            + data.settlements().get(road.secondSettlementId()).map(value -> value.name()).orElse("?")).orElse("a road");
     }
 
     /**
@@ -94,6 +111,7 @@ public final class CampService
         camp.end(cleared ? BanditCamp.Status.CLEARED : BanditCamp.Status.DISBANDED, encounter.cause(), gameTime);
         data.bandits().threatFor(camp.roadId()).campEnded(gameTime, settings.camps().respawnCooldownTicks());
         data.markChanged();
+        recordEnd(data, camp, gameTime);
     }
 
     /**
@@ -144,6 +162,7 @@ public final class CampService
                 encounter == null || encounter.cause() == null ? BanditEncounter.Cause.ADMIN : encounter.cause(), gameTime);
             data.bandits().threatFor(camp.roadId()).campEnded(gameTime, settings.camps().respawnCooldownTicks());
             data.markChanged();
+            recordEnd(data, camp, gameTime);
             ended.add(camp);
         }
         for (final BanditEncounter encounter : List.copyOf(data.bandits().open()))

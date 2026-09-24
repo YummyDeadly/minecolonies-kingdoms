@@ -157,6 +157,15 @@ public final class KingdomsConfig
         public final ModConfigSpec.LongValue warSiegeTicks;
         public final ModConfigSpec.LongValue warArmyCooldownTicks;
         public final ModConfigSpec.LongValue warSackedTicks;
+        public final ModConfigSpec.BooleanValue eventsEnabled;
+        public final ModConfigSpec.IntValue eventsEvaluationIntervalTicks;
+        public final ModConfigSpec.DoubleValue eventsChance;
+        public final ModConfigSpec.IntValue eventsMaxActiveGlobal;
+        public final ModConfigSpec.IntValue eventsMaxActivePerSettlement;
+        public final ModConfigSpec.LongValue eventsCooldownTicks;
+        public final ModConfigSpec.LongValue eventsNoticeTicks;
+        public final ModConfigSpec.LongValue eventsDurationTicks;
+        public final ModConfigSpec.IntValue eventsHistoryLimit;
         public final ModConfigSpec.IntValue warSoldierKillPenalty;
         public final ModConfigSpec.IntValue soldiersMaxPerArmy;
         public final ModConfigSpec.IntValue soldiersMaxGlobal;
@@ -503,6 +512,28 @@ public final class KingdomsConfig
             soldiersDematerializationRadius = builder.comment("At least 16 more than the materialization radius.")
                 .defineInRange("dematerializationRadius", 96, 32, 384);
             builder.pop();
+            builder.pop();
+
+            builder.push("events");
+            eventsEnabled = builder.comment("World events (Phase 11): harvest failures, trade fairs, bandit surges, garrison fever, militia musters,",
+                    "border incidents, envoy visits, and migrations. Disabling stops new events; open ones run their course.")
+                .define("enabled", true);
+            eventsEvaluationIntervalTicks = builder.comment("Ticks between event evaluations; each evaluation plans at most one event.")
+                .defineInRange("evaluationIntervalTicks", 12_000, 200, 720_000);
+            eventsChance = builder.comment("Chance that an evaluation plans an event at all.")
+                .defineInRange("eventChance", 0.5D, 0.0D, 1.0D);
+            eventsMaxActiveGlobal = builder.comment("Open (announced or active) events in the world.")
+                .defineInRange("maxActiveGlobal", 4, 0, 64);
+            eventsMaxActivePerSettlement = builder.comment("Open events involving one settlement.")
+                .defineInRange("maxActivePerSettlement", 1, 0, 8);
+            eventsCooldownTicks = builder.comment("Minimum time between two events of the same type on the same settlement, road, or faction pair.")
+                .defineInRange("cooldownTicks", 72_000L, 0L, 7_200_000L);
+            eventsNoticeTicks = builder.comment("Time between an event's announcement (rumours) and its start.")
+                .defineInRange("noticeTicks", 2_400L, 0L, 720_000L);
+            eventsDurationTicks = builder.comment("How long an event lasts.")
+                .defineInRange("durationTicks", 36_000L, 200L, 7_200_000L);
+            eventsHistoryLimit = builder.comment("World history entries kept (events, camps, wars, battles, abandoned colonies).")
+                .defineInRange("historyLimit", 256, 0, 4_096);
             builder.pop();
 
             builder.push("growth");

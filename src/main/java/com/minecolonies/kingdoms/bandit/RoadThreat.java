@@ -24,7 +24,7 @@ public final class RoadThreat
     private int campPressure;
     private long campCooldownUntil = Long.MIN_VALUE;
     private int camps;
-    private ThreatRules.Contributors lastContributors = new ThreatRules.Contributors(0, 0, 0, 0, 0, 0, 0);
+    private ThreatRules.Contributors lastContributors = new ThreatRules.Contributors(0, 0, 0, 0, 0, 0, 0, 0);
 
     public RoadThreat(final UUID roadId)
     {
@@ -130,6 +130,7 @@ public final class RoadThreat
         tag.putDouble("cSecurity", c.security());
         tag.putDouble("cSuppression", c.suppression());
         tag.putDouble("cCamp", c.camp());
+        tag.putDouble("cEvent", c.event());
         return tag;
     }
 
@@ -149,7 +150,7 @@ public final class RoadThreat
         record.campCooldownUntil = tag.contains("campCooldownUntil") ? tag.getLong("campCooldownUntil") : Long.MIN_VALUE;
         record.camps = Math.max(0, tag.getInt("camps"));
         record.lastContributors = new ThreatRules.Contributors(tag.getDouble("cBase"), tag.getDouble("cTraffic"),
-            tag.getDouble("cRemoteness"), tag.getDouble("cMomentum"), tag.getDouble("cCamp"), tag.getDouble("cSecurity"),
+            tag.getDouble("cRemoteness"), tag.getDouble("cMomentum"), tag.getDouble("cCamp"), tag.getDouble("cEvent"), tag.getDouble("cSecurity"),
             tag.getDouble("cSuppression"));
         return record;
     }
