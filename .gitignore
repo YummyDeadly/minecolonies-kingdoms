@@ -5,3 +5,8 @@ runs/
 out/
 *.iml
 .idea/
+logs/
+*.log
+*.log.gz
+thread-dump*.txt
+CLAUDE.md
